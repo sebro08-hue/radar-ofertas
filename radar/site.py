@@ -66,7 +66,7 @@ def build(conn, settings) -> Path:
     for g in conn.execute("SELECT * FROM games WHERE active=1"):
         gid = g["id"]
         offers = [o for o in prices.get(gid, []) if o["currency"] == "USD"]
-        if len(offers) < 2:          # requisito: cada juego publicado con precio en >= 2 tiendas
+        if len(offers) < 2:          # sin al menos 2 tiendas no hay nada que comparar
             continue
         best = min(offers, key=lambda o: o["price"])
         regular = best["regular"] or g["msrp"]

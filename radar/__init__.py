@@ -1,1 +1,1 @@
-"""Radar de Ofertas Multinúcleo: web scraping secuencial, concurrente y paralelo."""
+"""Radar de Ofertas: comparador de precios de videojuegos entre tiendas."""

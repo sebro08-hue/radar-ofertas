@@ -5,7 +5,6 @@
   run                             ejecuta el pipeline completo (etapas 1-5)
   replay-server                   sirve las respuestas capturadas con latencia simulada
   build-site                      regenera site/dist desde la base
-  contention                      experimento de contención (lock / local / cola / sin sync)
   validate-matching               precisión y exhaustividad sobre data/validation_pairs.csv
   games list|add|set|remove|import   administrar el catálogo sin tocar código
 """
@@ -83,14 +82,6 @@ def cmd_build_site(a):
     s = _settings(a)
     print("sitio en", site.build(db.connect(s.path("db_path")), s))
 
-
-def cmd_contention(a):
-    from . import contention
-    rows = contention.run(a.items, tuple(a.threads), a.repeats)
-    print(f"{'variante':<8} {'hilos':>5} {'mediana':>9} {'min':>8} {'max':>8} {'perdidos':>9} correcto")
-    for r in rows:
-        print(f"{r['variant']:<8} {r['threads']:>5} {r['median_s']:>8.3f}s {r['min_s']:>7.3f}s "
-              f"{r['max_s']:>7.3f}s {r['lost_updates_max']:>9} {r['correct']}")
 
 
 def cmd_validate(a):
@@ -185,12 +176,6 @@ def main(argv=None):
     p.set_defaults(fn=cmd_replay_server)
 
     sub.add_parser("build-site").set_defaults(fn=cmd_build_site)
-
-    p = sub.add_parser("contention")
-    p.add_argument("--items", type=int, default=2_000_000)
-    p.add_argument("--threads", type=int, nargs="+", default=[1, 2, 4, 8])
-    p.add_argument("--repeats", type=int, default=5)
-    p.set_defaults(fn=cmd_contention)
 
     p = sub.add_parser("validate-matching")
     p.add_argument("--file", default=str(config.ROOT / "data" / "validation_pairs.csv"))

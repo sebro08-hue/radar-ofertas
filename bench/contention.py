@@ -1,4 +1,8 @@
-"""Experimento de contención: contar ofertas por plataforma desde varios hilos.
+"""Benchmark: estrategias para agregar contadores compartidos desde varios hilos
+(por ejemplo, ofertas por plataforma durante una ejecución).
+
+Uso:
+    python bench/contention.py --items 2000000 --threads 1 2 4 8 --repeats 5
 
 Cuatro variantes sobre los mismos datos:
   unsafe   sin sincronización                -> condición de carrera (pierde conteos)
@@ -138,3 +142,21 @@ def run(n_items: int = 2_000_000, threads=(1, 2, 4, 8), repeats: int = 5,
         sys.setswitchinterval(old)
     assert sum(expected.values()) == n_items
     return rows
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--items", type=int, default=2_000_000)
+    ap.add_argument("--threads", type=int, nargs="+", default=[1, 2, 4, 8])
+    ap.add_argument("--repeats", type=int, default=5)
+    a = ap.parse_args()
+    rows = run(a.items, tuple(a.threads), a.repeats)
+    print(f"{'variante':<8} {'hilos':>5} {'mediana':>9} {'min':>8} {'max':>8} {'perdidos':>9} correcto")
+    for r in rows:
+        print(f"{r['variant']:<8} {r['threads']:>5} {r['median_s']:>8.3f}s {r['min_s']:>7.3f}s "
+              f"{r['max_s']:>7.3f}s {r['lost_updates_max']:>9} {r['correct']}")
+
+
+if __name__ == "__main__":
+    main()

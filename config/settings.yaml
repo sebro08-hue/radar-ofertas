@@ -1,4 +1,4 @@
-# Configuración del pipeline. Todo lo que se puede variar en los experimentos vive aquí
+# Configuración del pipeline. Todo es ajustable sin tocar código
 # y se puede sobrescribir desde la línea de comandos (ver `python -m radar --help`).
 
 db_path: data/radar.db
@@ -6,7 +6,7 @@ replay_dir: data/replay
 site_dir: site/dist
 
 # Identificación del cliente en cada solicitud.
-user_agent: "Mozilla/5.0 (X11; Linux x86_64) RadarOfertas-ProyectoAcademico/0.1"
+user_agent: "RadarOfertas/0.1 (+https://github.com/sebro08-hue/radar-ofertas)"
 
 # sequential | concurrent | parallel
 mode: parallel
