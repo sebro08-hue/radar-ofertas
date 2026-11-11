@@ -100,13 +100,13 @@ Mide precisión y exhaustividad contra `data/validation_pairs.csv` (pares revisa
 
 | Fuente | Datos | Acceso |
 |---|---|---|
-| Steam | catálogo, precio, reseñas de usuarios | HTML |
+| Steam | catálogo, precio, reseñas de usuarios | HTML (catálogo) y API de precios por lotes de 100 |
 | GOG | precio | API pública de catálogo |
 | Amazon | precio (físico y digital) | HTML |
 | Metacritic | Metascore | HTML |
 | How Long To Beat | duración | HTML, por id del juego |
 
-El scraper se identifica con su propio User-Agent, limita las solicitudes por dominio, usa caché local y no intenta saltarse bloqueos ni CAPTCHAs. Si un sitio rechaza la solicitud, se registra el fallo y se sigue con lo demás.
+El scraper se identifica con su propio User-Agent, limita las solicitudes por dominio, usa caché local y no intenta saltarse bloqueos ni CAPTCHAs. Si un sitio rechaza las solicitudes varias veces seguidas, un cortacircuitos deja de consultarlo el resto de la ejecución y sus datos quedan marcados como desactualizados.
 
 ## Estructura
 

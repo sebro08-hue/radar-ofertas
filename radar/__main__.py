@@ -40,7 +40,7 @@ def cmd_init_db(a):
 def cmd_discover(a):
     from .pipeline import Pipeline
     p = Pipeline(_settings(a))
-    n = p.discover()
+    n, _ = p.discover()
     total = p.conn.execute("SELECT COUNT(*) FROM games WHERE active=1").fetchone()[0]
     print(f"{n} juegos leídos del listado; catálogo activo: {total}")
 

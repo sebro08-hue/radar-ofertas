@@ -17,6 +17,7 @@ Modos:
 from __future__ import annotations
 
 import queue
+import re
 import threading
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -28,6 +29,21 @@ from .matching import MatchTask, match_game, set_catalog
 from .scrapers.base import ParseResult, Request, Scraper
 
 MODES = ("sequential", "concurrent", "parallel")
+BLOCK_ERRORS = ("HTTP 403", "HTTP 503", "circuito abierto")
+
+
+@dataclass
+class Collected:
+    """Resultados ya asignados a cada juego del catálogo."""
+    offers: dict[int, list] = field(default_factory=dict)          # game_id -> [Offer]
+    ratings: list[tuple[int, object]] = field(default_factory=list)
+    durations: list[tuple[int, object]] = field(default_factory=list)
+    ok: set[tuple[int, str]] = field(default_factory=set)            # (game_id, fuente) con datos frescos
+
+
+def _appids_in(url: str) -> list[int]:
+    m = re.search(r"appids=([\d,]+)", url)
+    return [int(x) for x in m.group(1).split(",")] if m else []
 
 
 @dataclass
@@ -70,7 +86,9 @@ class Pipeline:
 
     # ================================================================ etapa 0
 
-    def discover(self) -> int:
+    def discover(self) -> tuple[int, list[ParseResult]]:
+        """Devuelve (juegos leídos, resultados). Los resultados traen además las
+        calificaciones de usuarios de Steam, que run() aprovecha."""
         d = self.s["discover"]
         sd = scrapers.SteamDiscover(d["pages"], d["page_size"])
         jobs = [FetchJob(r, sd, None) for r in sd.page_requests()]
@@ -83,7 +101,7 @@ class Pipeline:
         self.conn.commit()
         for f in failures:
             print(f"  [discover] falló {f.job.req.url}: {f.error}")
-        return count
+        return count, results
 
     # ================================================================ etapas 1-2
 
@@ -142,7 +160,10 @@ class Pipeline:
         """Cola de fallidos: un último intento, en serie, al final de la ejecución."""
         out = []
         for f in failures:
-            if not f.retryable:
+            # No se insiste con un sitio que ya nos bloqueó (403/503) ni con uno cuyo
+            # cortacircuitos está abierto: solo alarga la corrida y molesta al sitio.
+            if not f.retryable or self.http.is_open(f.job.req.url) or \
+                    any(code in f.error for code in BLOCK_ERRORS):
                 continue
             try:
                 out.append(self._parse_one(f.job, self._fetch_one(f.job)))
@@ -150,6 +171,36 @@ class Pipeline:
             except Exception as exc:
                 f.error = f"{f.error} | final: {exc}"
         return out
+
+    @staticmethod
+    def _collect(games: list[dict], results: list[ParseResult]) -> Collected:
+        """Asigna cada resultado a su juego: por game_id de la solicitud o, en las
+        solicitudes por lote (game_id=None), por steam_appid."""
+        by_appid = {g["steam_appid"]: g for g in games if g.get("steam_appid")}
+        col = Collected()
+        for res in results:
+            src = res.request.source
+            gid = res.request.game_id
+            if gid is not None:
+                col.offers.setdefault(gid, []).extend(res.offers)
+                col.ratings += [(gid, r) for r in res.ratings]
+                if res.duration:
+                    col.durations.append((gid, res.duration))
+                col.ok.add((gid, src))
+                continue
+            for o in res.offers:
+                g = by_appid.get(o.steam_appid)
+                if g:
+                    o.title = o.title or g["canonical_title"]     # id exacto: el título es el del catálogo
+                    col.offers.setdefault(g["id"], []).append(o)
+            for r in res.ratings:
+                g = by_appid.get(r.steam_appid)
+                if g:
+                    col.ratings.append((g["id"], r))
+            for appid in _appids_in(res.request.url):
+                if appid in by_appid:
+                    col.ok.add((by_appid[appid]["id"], src))
+        return col
 
     # ================================================================ etapa 3
 
@@ -183,11 +234,12 @@ class Pipeline:
 
     # ================================================================ etapa 4
 
-    def _aggregate(self, run_id, games, results, by_game, matches, failures) -> tuple[int, int]:
+    def _aggregate(self, run_id, games, col: Collected, matches, failures) -> tuple[int, int]:
         ts = db.now()
         c = self.conn
         n_offers = n_flags = 0
         games_by_id = {g["id"]: g for g in games}
+        by_game = col.offers
 
         for mr in matches:
             offers = by_game[mr.game_id]
@@ -211,29 +263,30 @@ class Pipeline:
                           "VALUES (?,?,?,?,?,?)", (run_id, mr.game_id, store, cand, round(sc, 4), reason))
                 n_flags += 1
 
-        for res in results:
-            gid = res.request.game_id
-            if gid is None:
-                continue
-            for r in res.ratings:
-                c.execute("INSERT INTO ratings (run_id, game_id, source, score, votes, platform, observed_at) "
-                          "VALUES (?,?,?,?,?,?,?)", (run_id, gid, r.source, r.score, r.votes, r.platform, ts))
-            if res.duration:
-                d = res.duration
-                c.execute("INSERT INTO durations (run_id, game_id, main_h, plus_h, comp_h, observed_at) "
-                          "VALUES (?,?,?,?,?,?)", (run_id, gid, d.main_h, d.plus_h, d.comp_h, ts))
+        for gid, r in col.ratings:
+            c.execute("INSERT INTO ratings (run_id, game_id, source, score, votes, platform, observed_at) "
+                      "VALUES (?,?,?,?,?,?,?)", (run_id, gid, r.source, r.score, r.votes, r.platform, ts))
+        for gid, d in col.durations:
+            c.execute("INSERT INTO durations (run_id, game_id, main_h, plus_h, comp_h, observed_at) "
+                      "VALUES (?,?,?,?,?,?)", (run_id, gid, d.main_h, d.plus_h, d.comp_h, ts))
+        for gid, src in col.ok:
             c.execute("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,?,?,1)
                          ON CONFLICT(game_id, source) DO UPDATE SET last_ok=excluded.last_ok,
-                         last_try=excluded.last_try, ok=1""", (gid, res.request.source, ts, ts))
+                         last_try=excluded.last_try, ok=1""", (gid, src, ts, ts))
 
+        by_appid = {g["steam_appid"]: g["id"] for g in games if g.get("steam_appid")}
         for f in failures:
             gid = f.job.req.game_id
             c.execute("INSERT INTO failures (run_id, source, game_id, url, error, recovered) VALUES (?,?,?,?,?,?)",
                       (run_id, f.job.req.source, gid, f.job.req.url, f.error, int(f.recovered)))
-            if gid is not None and not f.recovered:
+            if f.recovered:
+                continue
+            # Una solicitud por lote que falla deja desactualizados a todos los juegos del lote.
+            stale = [gid] if gid is not None else [by_appid[a] for a in _appids_in(f.job.req.url) if a in by_appid]
+            for g in stale:
                 c.execute("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,NULL,?,0)
                              ON CONFLICT(game_id, source) DO UPDATE SET last_try=excluded.last_try, ok=0""",
-                          (gid, f.job.req.source, ts))
+                          (g, f.job.req.source, ts))
         c.commit()
         return n_offers, n_flags
 
@@ -245,14 +298,16 @@ class Pipeline:
         rep = RunReport(run_id, self.mode)
         st = rep.stage_times
 
+        discovered: list[ParseResult] = []
         if with_discover:
             t = time.perf_counter()
-            self.discover()
+            _, discovered = self.discover()
             st["discover"] = time.perf_counter() - t
 
         games = db.load_games(self.conn, limit)
         active = scrapers.build(self.s["sources"])
-        jobs = [FetchJob(r, sc, g) for g in games for sc in active.values() for r in sc.requests_for(g)]
+        jobs = [FetchJob(r, sc, None) for sc in active.values() for r in sc.batch_requests(games)]
+        jobs += [FetchJob(r, sc, g) for g in games for sc in active.values() for r in sc.requests_for(g)]
         rep.requests = len(jobs)
 
         t = time.perf_counter()
@@ -263,17 +318,15 @@ class Pipeline:
         results += self._retry_failed(failures)
         st["retry_failed"] = time.perf_counter() - t
 
-        by_game: dict[int, list] = {}
-        for res in results:
-            if res.offers and res.request.game_id is not None:
-                by_game.setdefault(res.request.game_id, []).extend(res.offers)
+        # Las páginas del descubrimiento solo aportan calificaciones (las ofertas salen del lote).
+        col = self._collect(games, results + [ParseResult(r.request, ratings=r.ratings) for r in discovered])
 
         t = time.perf_counter()
-        matches = self._match(games, by_game)
+        matches = self._match(games, col.offers)
         st["match"] = time.perf_counter() - t
 
         t = time.perf_counter()
-        rep.matched_offers, rep.flags = self._aggregate(run_id, games, results, by_game, matches, failures)
+        rep.matched_offers, rep.flags = self._aggregate(run_id, games, col, matches, failures)
         st["aggregate"] = time.perf_counter() - t
 
         rep.failures = sum(1 for f in failures if not f.recovered)

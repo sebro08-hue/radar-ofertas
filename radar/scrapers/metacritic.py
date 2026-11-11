@@ -15,7 +15,8 @@ COUNT = re.compile(r'"reviewCount"\s*:\s*"?(\d+)')
 
 
 def slugify(title: str) -> str:
-    t = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()
+    t = re.sub(r"[™®©]", "", title)            # antes de NFKD, que convierte ™ en "TM"
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().lower()
     t = t.replace("&", " ").replace("'", "")
     t = re.sub(r"(?<=\d),(?=\d)", "", t)       # "40,000" -> "40000"
     t = re.sub(r"[^a-z0-9]+", "-", t)

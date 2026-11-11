@@ -5,6 +5,9 @@
 - Semáforo por dominio: limita conexiones simultáneas a cada sitio.
 - Sesión de `requests` por hilo (threading.local): las sesiones no son seguras entre hilos.
 - Estadísticas por dominio protegidas por lock (ok / reintentadas / fallidas).
+- Cortacircuitos por dominio: tras N fallos seguidos (bloqueos 403/429/503 o
+  reintentos agotados), el dominio se da por caído el resto de la ejecución y las
+  solicitudes siguientes fallan al instante sin tocar el sitio.
 - Modo live (con captura y caché local) o modo replay (servidor local).
 """
 from __future__ import annotations
@@ -21,6 +24,7 @@ import requests
 from . import replay
 
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+BLOCK_STATUS = {401, 403, 412}   # el sitio rechaza al cliente
 
 
 class FetchError(Exception):
@@ -43,6 +47,11 @@ class HttpClient:
         self.max_retries = http["max_retries"]
         self.backoff_base = http["backoff_base_s"]
         self.backoff_max = http["backoff_max_s"]
+        self.breaker_threshold = int(http.get("circuit_breaker_failures", 0))  # 0 = desactivado
+
+        self._breaker_lock = threading.Lock()
+        self._consecutive: dict[str, int] = defaultdict(int)
+        self._open: set[str] = set()
 
         self._local = threading.local()
         self._sem_lock = threading.Lock()
@@ -73,6 +82,29 @@ class HttpClient:
         with self._stats_lock:
             self.stats[domain][field] += 1
 
+    def _on_success(self, domain: str) -> None:
+        with self._breaker_lock:
+            self._consecutive[domain] = 0
+
+    def _on_failure(self, domain: str) -> None:
+        if not self.breaker_threshold:
+            return
+        with self._breaker_lock:
+            self._consecutive[domain] += 1
+            if self._consecutive[domain] >= self.breaker_threshold and domain not in self._open:
+                self._open.add(domain)
+                print(f"  [cortacircuitos] {domain}: {self._consecutive[domain]} fallos seguidos, "
+                      f"se deja de consultar en esta ejecución")
+
+    def is_open(self, url_or_domain: str) -> bool:
+        domain = urlsplit(url_or_domain).hostname or url_or_domain
+        with self._breaker_lock:
+            return domain in self._open
+
+    def open_domains(self) -> list[str]:
+        with self._breaker_lock:
+            return sorted(self._open)
+
     def _sleep_backoff(self, attempt: int) -> None:
         cap = min(self.backoff_max, self.backoff_base * (2 ** attempt))
         time.sleep(random.uniform(0, cap))
@@ -89,6 +121,9 @@ class HttpClient:
 
     def get(self, url: str, cookies: dict | None = None) -> str:
         domain = urlsplit(url).hostname or "?"
+        if self.is_open(domain):
+            self._count(domain, "failed")
+            raise FetchError(url, "circuito abierto", retryable=False)
         cached = self._cached(domain, url)
         if cached is not None:
             self._count(domain, "ok")
@@ -104,6 +139,8 @@ class HttpClient:
 
         last_reason = "?"
         for attempt in range(self.max_retries + 1):
+            if attempt and self.is_open(domain):
+                break                       # otro hilo ya abrió el circuito: no seguir insistiendo
             if attempt:
                 self._count(domain, "retried")
                 self._sleep_backoff(attempt)
@@ -115,15 +152,21 @@ class HttpClient:
                 continue
             if resp.status_code == 200:
                 self._count(domain, "ok")
+                self._on_success(domain)
                 if self.capture:
                     replay.save_capture(self.replay_dir, domain, url, resp.content)
                 return resp.text
             last_reason = f"HTTP {resp.status_code}"
             if resp.status_code not in RETRYABLE_STATUS:
-                # 403/404/412...: el sitio nos rechaza. No se insiste ni se intenta evadirlo.
+                # 403/404/412...: el sitio nos rechaza o no existe. No se insiste ni se intenta evadirlo.
                 self._count(domain, "failed")
+                if resp.status_code in BLOCK_STATUS:
+                    self._on_failure(domain)
+                else:
+                    self._on_success(domain)   # un 404 es una respuesta normal, no un bloqueo
                 raise FetchError(url, last_reason, retryable=False)
         self._count(domain, "failed")
+        self._on_failure(domain)
         raise FetchError(url, last_reason, retryable=True)
 
     def snapshot_stats(self) -> dict:

@@ -29,6 +29,9 @@ http:
   max_retries: 3
   backoff_base_s: 0.5
   backoff_max_s: 8.0
+  # Fallos seguidos (bloqueos o reintentos agotados) para dejar de consultar un sitio
+  # el resto de la ejecución. 0 = desactivado.
+  circuit_breaker_failures: 8
 
 # Número de workers por etapa (modos concurrent / parallel).
 workers:
