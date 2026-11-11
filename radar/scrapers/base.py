@@ -33,6 +33,7 @@ class Offer:
     format: str = "digital"      # digital | physical
     platform: str | None = None
     kind_hint: str | None = None  # game | dlc | pack | ...
+    steam_appid: int | None = None  # si se conoce, el pipeline asigna la oferta al juego por id
 
 
 @dataclass
@@ -41,6 +42,7 @@ class Rating:
     score: float                 # 0..100
     votes: int | None = None
     platform: str | None = None
+    steam_appid: int | None = None
 
 
 @dataclass
@@ -63,7 +65,15 @@ class Scraper:
     name: str = "?"
     kind: str = "?"              # price | rating | duration | discover
 
-    def requests_for(self, game: dict) -> list[Request]:
+    # Implementaciones por defecto: no piden nada. Cada fuente sobrescribe la que usa,
+    # por eso aquí los parámetros no se usan.
+
+    def requests_for(self, game: dict) -> list[Request]:  # NOSONAR
+        """Solicitudes para un juego concreto."""
+        return []
+
+    def batch_requests(self, games: list[dict]) -> list[Request]:  # NOSONAR
+        """Solicitudes que cubren varios juegos a la vez (game_id=None)."""
         return []
 
     def parse(self, game: dict | None, req: Request, body: str) -> ParseResult:
