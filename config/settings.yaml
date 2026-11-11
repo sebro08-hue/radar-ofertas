@@ -1,0 +1,69 @@
+# Configuración del pipeline. Todo lo que se puede variar en los experimentos vive aquí
+# y se puede sobrescribir desde la línea de comandos (ver `python -m radar --help`).
+
+db_path: data/radar.db
+replay_dir: data/replay
+site_dir: site/dist
+
+# Identificación del cliente en cada solicitud.
+user_agent: "Mozilla/5.0 (X11; Linux x86_64) RadarOfertas-ProyectoAcademico/0.1"
+
+# sequential | concurrent | parallel
+mode: parallel
+
+# live: sitios reales. replay: servidor local con respuestas capturadas.
+source: live
+# En modo live, guarda cada respuesta en replay_dir para usarla luego en replay.
+capture: true
+# En modo live, reutiliza respuestas capturadas más nuevas que esto (caché local). 0 = no usar caché.
+cache_ttl_hours: 12
+
+replay:
+  host: 127.0.0.1
+  port: 8765
+  latency_ms: 150     # latencia fija simulada
+  jitter_ms: 0        # variación aleatoria ±jitter_ms
+
+http:
+  timeout_s: 15
+  max_retries: 3
+  backoff_base_s: 0.5
+  backoff_max_s: 8.0
+
+# Número de workers por etapa (modos concurrent / parallel).
+workers:
+  discover: 4
+  fetch: 16
+  match: 8
+
+# executor del emparejamiento en modo parallel: process | thread
+match_executor: process
+
+# Tamaño de las colas acotadas entre etapas.
+queues:
+  fetched: 256
+
+# Conexiones simultáneas máximas por dominio (semáforo por dominio).
+per_domain_limit:
+  default: 4
+  store.steampowered.com: 4
+  catalog.gog.com: 4
+  www.amazon.com: 1
+  www.metacritic.com: 2
+  howlongtobeat.com: 2
+  127.0.0.1: 64
+
+# Etapa 0: descubrimiento del catálogo (Steam Top Sellers, paginado).
+discover:
+  pages: 12          # 12 x 50 = 600 candidatos
+  page_size: 50
+
+matching:
+  threshold: 0.82            # elegido con `python -m radar validate-matching --sweep`
+  doubtful_margin: 0.10      # |score - threshold| < margen  => dudoso
+  # Agrega todo el catálogo como candidatos "distractores" para que el
+  # emparejamiento tenga carga de CPU medible.
+  compare_against_catalog: true
+
+# Fuentes activas (ver radar/scrapers/__init__.py).
+sources: [steam, gog, amazon, metacritic, hltb]

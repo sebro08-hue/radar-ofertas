@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel de métricas</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous"></script>
+</head>
+<body>
+<header>
+  <h1>Radar de Ofertas</h1>
+  <nav><a href="index.html">Resultados</a><a href="metrics.html">Métricas</a></nav>
+</header>
+<main>
+  <h2>Última ejecución</h2>
+  <div class="stats" id="run"></div>
+  <h3>Tiempo por etapa</h3>
+  <div class="table-wrap"><table id="stages"></table></div>
+  <h3>Solicitudes por sitio</h3>
+  <div class="table-wrap"><table id="requests"></table></div>
+  <h3>Juegos sin emparejar o con emparejamiento dudoso</h3>
+  <div class="table-wrap"><table id="flags"></table></div>
+  <h3>Cola de fallidos</h3>
+  <div class="table-wrap"><table id="failures"></table></div>
+  <h2>Speedup (modo replay)</h2>
+  <p class="meta" id="hw"></p>
+  <div class="chart-box"><canvas id="speedup-io" height="110"></canvas></div>
+  <div class="chart-box"><canvas id="speedup-cpu" height="110"></canvas></div>
+</main>
+<script src="app.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const table = (el, head, rows) => { el.innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${head.length}">—</td></tr>`}</tbody>`; };
+
+fetch("data/metrics.json").then(r => r.json()).then(m => {
+  const run = m.run || {};
+  const st = run.stage_times ? JSON.parse(run.stage_times) : {};
+  $("run").innerHTML = [["Fecha", fmtDate(run.finished_at)], ["Duración", run.total_s ? run.total_s.toFixed(1) + " s" : "—"],
+    ["Modo", run.mode ?? "—"], ["Fuente", run.source ?? "—"]].map(([k, v]) => `<div class="stat">${k}<b>${esc(v)}</b></div>`).join("");
+  table($("stages"), ["Etapa", "Segundos"], Object.entries(st).map(([k, v]) => [k, v.toFixed(3)]));
+  table($("requests"), ["Dominio", "Exitosas", "Reintentadas", "Fallidas"], m.requests.map(r => [r.domain, r.ok, r.retried, r.failed]));
+  table($("flags"), ["Juego", "Tienda", "Candidato", "Puntaje", "Motivo"], m.flags.map(f => [f.game, f.store, f.candidate, f.score, f.reason]));
+  table($("failures"), ["Fuente", "URL", "Error", "Recuperada"], m.failures.map(f => [f.source, f.url, f.error, f.recovered ? "sí" : "no"]));
+});
+
+function speedChart(el, title, series) {
+  new Chart(el, {
+    type: "line",
+    data: { datasets: series.map(([label, pts]) => ({ label, data: pts.map(p => ({ x: p.p, y: p.S_abs })) })) },
+    options: { plugins: { title: { display: true, text: title } },
+      scales: { x: { type: "linear", title: { display: true, text: "workers" } }, y: { title: { display: true, text: "speedup absoluto" } } } },
+  });
+}
+fetch("data/bench.json").then(r => r.ok ? r.json() : null).then(b => {
+  if (!b) { $("hw").textContent = "Todavía no hay barridos (python bench/run_sweeps.py)."; return; }
+  const h = b.hardware;
+  $("hw").textContent = `${h.processor} · ${h.physical_cores ?? "?"} núcleos físicos / ${h.logical_cpus} lógicos · SMT ${h.smt ? "sí" : "no"} · ${h.memory_gb ?? "?"} GB · Python ${h.python} · latencia ${b.latency_ms} ms ±${b.jitter_ms}`;
+  speedChart($("speedup-io"), "Descarga (concurrente)", [["fetch+parse", b.io.fetch_parse], ["pipeline", b.io.total]]);
+  speedChart($("speedup-cpu"), "Emparejamiento (paralelo)", Object.entries(b.cpu).flatMap(([ex, c]) => [[`match (${ex})`, c.match], [`pipeline (${ex})`, c.total]]));
+});
+</script>
+</body>
+</html>

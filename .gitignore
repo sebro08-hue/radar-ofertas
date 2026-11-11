@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Respuestas capturadas para replay: pesan mucho; se comparten aparte (zip / release).
+data/replay/
+data/bench.db
+data/*.db-wal
+data/*.db-shm
+
+# Sitio generado (lo construye el pipeline o GitHub Actions).
+site/dist/

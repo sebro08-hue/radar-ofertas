@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Radar de Ofertas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Radar de Ofertas</h1>
+  <nav><a href="index.html">Resultados</a><a href="metrics.html">Métricas</a></nav>
+  <span class="updated" id="updated"></span>
+</header>
+<main>
+  <div class="filters">
+    <input id="q" type="search" placeholder="Buscar título">
+    <select id="kind"><option value="">Tipo: todos</option><option value="game">Juego</option><option value="game+dlc">Juego + DLC</option><option value="dlc">DLC</option><option value="other">Otro</option></select>
+    <select id="platform"><option value="">Plataforma: todas</option></select>
+    <select id="format"><option value="">Formato: todos</option><option value="digital">Digital</option><option value="physical">Físico</option></select>
+    <select id="store"><option value="">Tienda: todas</option></select>
+    <select id="sort">
+      <option value="discount">Mayor descuento</option>
+      <option value="price">Mejor precio</option>
+      <option value="name">Nombre</option>
+      <option value="rating">Calificación</option>
+    </select>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="pager"><button id="prev">Anterior</button><span id="page"></span><button id="next">Siguiente</button></div>
+</main>
+<script src="app.js"></script>
+<script>
+const PAGE = 24;
+let all = [], page = 0;
+const $ = id => document.getElementById(id);
+
+function fillSelect(sel, values) {
+  [...new Set(values)].sort().forEach(v => sel.insertAdjacentHTML("beforeend", `<option>${esc(v)}</option>`));
+}
+
+function filtered() {
+  const q = $("q").value.toLowerCase(), k = $("kind").value, p = $("platform").value,
+        f = $("format").value, s = $("store").value, sort = $("sort").value;
+  const list = all.filter(c => (!q || c.title.toLowerCase().includes(q)) && (!k || c.kind === k) &&
+    (!p || c.platforms.includes(p)) && (!f || c.formats.includes(f)) && (!s || c.stores.includes(s)));
+  const cmp = {
+    discount: (a, b) => b.discount_pct - a.discount_pct,
+    price: (a, b) => a.best_price - b.best_price,
+    name: (a, b) => a.title.localeCompare(b.title),
+    rating: (a, b) => (b.rating ?? -1) - (a.rating ?? -1),
+  }[sort];
+  return list.sort(cmp);
+}
+
+function render() {
+  const list = filtered(), pages = Math.max(1, Math.ceil(list.length / PAGE));
+  page = Math.min(page, pages - 1);
+  $("grid").innerHTML = list.slice(page * PAGE, (page + 1) * PAGE).map(card).join("") || "<p>Sin resultados.</p>";
+  $("page").textContent = `${page + 1} / ${pages} · ${list.length} juegos`;
+}
+
+fetch("data/cards.json").then(r => r.json()).then(d => {
+  all = d.cards;
+  $("updated").textContent = "Actualizado: " + fmtDate(d.updated_at);
+  fillSelect($("platform"), all.flatMap(c => c.platforms));
+  fillSelect($("store"), all.flatMap(c => c.stores));
+  render();
+});
+["q", "kind", "platform", "format", "store", "sort"].forEach(id => $(id).addEventListener("input", () => { page = 0; render(); }));
+$("prev").onclick = () => { page = Math.max(0, page - 1); render(); };
+$("next").onclick = () => { page++; render(); };
+</script>
+</body>
+</html>

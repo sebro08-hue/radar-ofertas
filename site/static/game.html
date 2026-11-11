@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detalle del juego</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous"></script>
+</head>
+<body>
+<header>
+  <h1>Radar de Ofertas</h1>
+  <nav><a href="index.html">Resultados</a><a href="metrics.html">Métricas</a></nav>
+</header>
+<main id="main"><p>Cargando…</p></main>
+<script src="app.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get("id");
+fetch(`data/games/${encodeURIComponent(id)}.json`).then(r => r.json()).then(g => {
+  document.title = g.title;
+  const stale = new Map(g.source_status.filter(s => !s.ok).map(s => [s.source, s.last_ok]));
+  const rows = g.offers.map(o => `<tr><td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.store)}</a></td>
+    <td>${money(o.price, o.currency)}</td><td>${o.regular ? money(o.regular, o.currency) : "—"}</td>
+    <td>${esc(o.format)}</td><td>${esc(o.platform ?? "")}</td><td>${fmtDate(o.observed_at)}</td></tr>`).join("");
+  const ratings = g.ratings.map(r => `${esc(r.source)}: <b>${r.score}</b>`).join(" · ") || "—";
+  const d = g.duration;
+  const staleNote = stale.size ? `<p class="tag stale">Fuentes sin actualizar: ${[...stale].map(([s, t]) => `${esc(s)} (último dato: ${t ? fmtDate(t) : "nunca"})`).join(", ")}</p>` : "";
+  document.getElementById("main").innerHTML = `
+    <div class="detail">
+      <img src="${esc(g.image)}" alt="">
+      <div>
+        <h2>${esc(g.title)}</h2>
+        <p class="meta">${esc(g.platforms.join(", "))} · Lanzamiento: ${esc(g.release_date ?? "—")}</p>
+        <p><span class="price">${money(g.best_price)}</span> en ${esc(g.best_store)} ${g.historic_low ? '<span class="tag low">mínimo histórico</span>' : ""}</p>
+        <p>MSRP: ${money(g.msrp)}</p>
+        <p>Calificaciones: ${ratings}</p>
+        <p>How Long To Beat: ${d ? `historia ${d.main_h ?? "—"} h · +extras ${d.plus_h ?? "—"} h · completista ${d.comp_h ?? "—"} h` : "—"}</p>
+        ${staleNote}
+      </div>
+    </div>
+    <h3>Precios</h3>
+    <div class="table-wrap"><table><thead><tr><th>Tienda</th><th>Precio</th><th>Regular</th><th>Formato</th><th>Plataforma</th><th>Obtenido</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <h3>Historial de precios</h3>
+    <div class="chart-box"><canvas id="hist" height="110"></canvas></div>`;
+
+  const byStore = {};
+  g.history.forEach(h => (byStore[h.store] ??= []).push({ x: h.observed_at, y: h.price }));
+  new Chart(document.getElementById("hist"), {
+    type: "line",
+    data: { datasets: Object.entries(byStore).map(([store, pts]) => ({ label: store, data: pts, stepped: true })) },
+    options: { parsing: { xAxisKey: "x", yAxisKey: "y" }, scales: { x: { type: "category", labels: [...new Set(g.history.map(h => h.observed_at))] } } },
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+"""Cliente HTTP compartido por todas las etapas de E/S.
+
+- Timeout en cada solicitud.
+- Reintentos con backoff exponencial y jitter ("full jitter"), con máximo definido.
+- Semáforo por dominio: limita conexiones simultáneas a cada sitio.
+- Sesión de `requests` por hilo (threading.local): las sesiones no son seguras entre hilos.
+- Estadísticas por dominio protegidas por lock (ok / reintentadas / fallidas).
+- Modo live (con captura y caché local) o modo replay (servidor local).
+"""
+from __future__ import annotations
+
+import random
+import threading
+import time
+from collections import defaultdict
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import requests
+
+from . import replay
+
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+class FetchError(Exception):
+    def __init__(self, url: str, reason: str, retryable: bool = True):
+        super().__init__(f"{reason}: {url}")
+        self.url = url
+        self.reason = reason
+        self.retryable = retryable
+
+
+class HttpClient:
+    def __init__(self, settings):
+        self.s = settings
+        self.source = settings["source"]
+        self.replay_dir: Path = settings.path("replay_dir")
+        self.capture = bool(settings["capture"]) and self.source == "live"
+        self.cache_ttl_s = float(settings["cache_ttl_hours"]) * 3600
+        http = settings["http"]
+        self.timeout = http["timeout_s"]
+        self.max_retries = http["max_retries"]
+        self.backoff_base = http["backoff_base_s"]
+        self.backoff_max = http["backoff_max_s"]
+
+        self._local = threading.local()
+        self._sem_lock = threading.Lock()
+        self._sems: dict[str, threading.BoundedSemaphore] = {}
+        self._stats_lock = threading.Lock()
+        self.stats: dict[str, dict[str, int]] = defaultdict(lambda: {"ok": 0, "retried": 0, "failed": 0})
+
+    # ------------------------------------------------------------- utilidades
+
+    def _session(self) -> requests.Session:
+        sess = getattr(self._local, "session", None)
+        if sess is None:
+            sess = requests.Session()
+            sess.headers.update({"User-Agent": self.s["user_agent"],
+                                 "Accept-Language": "en-US,en;q=0.9"})
+            self._local.session = sess
+        return sess
+
+    def _semaphore(self, key: str) -> threading.BoundedSemaphore:
+        with self._sem_lock:
+            sem = self._sems.get(key)
+            if sem is None:
+                sem = threading.BoundedSemaphore(self.s.domain_limit(key))
+                self._sems[key] = sem
+            return sem
+
+    def _count(self, domain: str, field: str) -> None:
+        with self._stats_lock:
+            self.stats[domain][field] += 1
+
+    def _sleep_backoff(self, attempt: int) -> None:
+        cap = min(self.backoff_max, self.backoff_base * (2 ** attempt))
+        time.sleep(random.uniform(0, cap))
+
+    def _cached(self, domain: str, url: str) -> bytes | None:
+        if self.source != "live" or self.cache_ttl_s <= 0:
+            return None
+        path = replay.capture_path(self.replay_dir, domain, url)
+        if path.is_file() and time.time() - path.stat().st_mtime < self.cache_ttl_s:
+            return path.read_bytes()
+        return None
+
+    # ------------------------------------------------------------- API
+
+    def get(self, url: str, cookies: dict | None = None) -> str:
+        domain = urlsplit(url).hostname or "?"
+        cached = self._cached(domain, url)
+        if cached is not None:
+            self._count(domain, "ok")
+            return cached.decode("utf-8", errors="replace")
+
+        if self.source == "replay":
+            r = self.s["replay"]
+            target = f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}"
+            sem = self._semaphore(r["host"])
+        else:
+            target = url
+            sem = self._semaphore(domain)
+
+        last_reason = "?"
+        for attempt in range(self.max_retries + 1):
+            if attempt:
+                self._count(domain, "retried")
+                self._sleep_backoff(attempt)
+            try:
+                with sem:
+                    resp = self._session().get(target, cookies=cookies, timeout=self.timeout)
+            except requests.RequestException as exc:
+                last_reason = type(exc).__name__
+                continue
+            if resp.status_code == 200:
+                self._count(domain, "ok")
+                if self.capture:
+                    replay.save_capture(self.replay_dir, domain, url, resp.content)
+                return resp.text
+            last_reason = f"HTTP {resp.status_code}"
+            if resp.status_code not in RETRYABLE_STATUS:
+                # 403/404/412...: el sitio nos rechaza. No se insiste ni se intenta evadirlo.
+                self._count(domain, "failed")
+                raise FetchError(url, last_reason, retryable=False)
+        self._count(domain, "failed")
+        raise FetchError(url, last_reason, retryable=True)
+
+    def snapshot_stats(self) -> dict:
+        with self._stats_lock:
+            return {d: dict(v) for d, v in self.stats.items()}
