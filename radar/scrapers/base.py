@@ -65,10 +65,14 @@ class Scraper:
     name: str = "?"
     kind: str = "?"              # price | rating | duration | discover
 
-    def requests_for(self, game: dict) -> list[Request]:
+    # Implementaciones por defecto: no piden nada. Cada fuente sobrescribe la que usa,
+    # por eso aquí los parámetros no se usan.
+
+    def requests_for(self, game: dict) -> list[Request]:  # NOSONAR
+        """Solicitudes para un juego concreto."""
         return []
 
-    def batch_requests(self, games: list[dict]) -> list[Request]:
+    def batch_requests(self, games: list[dict]) -> list[Request]:  # NOSONAR
         """Solicitudes que cubren varios juegos a la vez (game_id=None)."""
         return []
 

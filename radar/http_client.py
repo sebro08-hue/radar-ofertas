@@ -27,6 +27,18 @@ RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 BLOCK_STATUS = {401, 403, 412}   # el sitio rechaza al cliente
 
 
+def _decode(resp: requests.Response) -> str:
+    """Decodifica sin `resp.text`: cuando el servidor no declara charset, `requests`
+    adivina la codificación analizando todo el cuerpo (~240 ms por página de 500 KB,
+    CPU pura dentro de la etapa de E/S). Si hay charset declarado se usa; si no, UTF-8."""
+    declared = "charset=" in resp.headers.get("Content-Type", "").lower()
+    encoding = resp.encoding if declared and resp.encoding else "utf-8"
+    try:
+        return resp.content.decode(encoding, errors="replace")
+    except LookupError:                     # charset desconocido
+        return resp.content.decode("utf-8", errors="replace")
+
+
 class FetchError(Exception):
     def __init__(self, url: str, reason: str, retryable: bool = True):
         super().__init__(f"{reason}: {url}")
@@ -47,7 +59,8 @@ class HttpClient:
         self.max_retries = http["max_retries"]
         self.backoff_base = http["backoff_base_s"]
         self.backoff_max = http["backoff_max_s"]
-        self.breaker_threshold = int(http.get("circuit_breaker_failures", 0))  # 0 = desactivado
+        # Con valor cero el cortacircuitos queda desactivado.
+        self.breaker_threshold = int(http.get("circuit_breaker_failures", 0))
 
         self._breaker_lock = threading.Lock()
         self._consecutive: dict[str, int] = defaultdict(int)
@@ -155,7 +168,7 @@ class HttpClient:
                 self._on_success(domain)
                 if self.capture:
                     replay.save_capture(self.replay_dir, domain, url, resp.content)
-                return resp.text
+                return _decode(resp)
             last_reason = f"HTTP {resp.status_code}"
             if resp.status_code not in RETRYABLE_STATUS:
                 # 403/404/412...: el sitio nos rechaza o no existe. No se insiste ni se intenta evadirlo.

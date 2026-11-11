@@ -46,6 +46,27 @@ def _appids_in(url: str) -> list[int]:
     return [int(x) for x in m.group(1).split(",")] if m else []
 
 
+def _collect_single(col: Collected, res: ParseResult) -> None:
+    """Resultado de una solicitud hecha para un juego concreto."""
+    gid = res.request.game_id
+    col.offers.setdefault(gid, []).extend(res.offers)
+    col.ratings += [(gid, r) for r in res.ratings]
+    if res.duration:
+        col.durations.append((gid, res.duration))
+    col.ok.add((gid, res.request.source))
+
+
+def _collect_batch(col: Collected, res: ParseResult, by_appid: dict[int, dict]) -> None:
+    """Resultado de una solicitud por lote: cada oferta/calificación trae su steam_appid."""
+    for o in res.offers:
+        g = by_appid.get(o.steam_appid)
+        if g:
+            o.title = o.title or g["canonical_title"]     # id exacto: el título es el del catálogo
+            col.offers.setdefault(g["id"], []).append(o)
+    col.ratings += [(by_appid[r.steam_appid]["id"], r) for r in res.ratings if r.steam_appid in by_appid]
+    col.ok |= {(by_appid[a]["id"], res.request.source) for a in _appids_in(res.request.url) if a in by_appid}
+
+
 @dataclass
 class FetchJob:
     req: Request
@@ -179,27 +200,10 @@ class Pipeline:
         by_appid = {g["steam_appid"]: g for g in games if g.get("steam_appid")}
         col = Collected()
         for res in results:
-            src = res.request.source
-            gid = res.request.game_id
-            if gid is not None:
-                col.offers.setdefault(gid, []).extend(res.offers)
-                col.ratings += [(gid, r) for r in res.ratings]
-                if res.duration:
-                    col.durations.append((gid, res.duration))
-                col.ok.add((gid, src))
-                continue
-            for o in res.offers:
-                g = by_appid.get(o.steam_appid)
-                if g:
-                    o.title = o.title or g["canonical_title"]     # id exacto: el título es el del catálogo
-                    col.offers.setdefault(g["id"], []).append(o)
-            for r in res.ratings:
-                g = by_appid.get(r.steam_appid)
-                if g:
-                    col.ratings.append((g["id"], r))
-            for appid in _appids_in(res.request.url):
-                if appid in by_appid:
-                    col.ok.add((by_appid[appid]["id"], src))
+            if res.request.game_id is not None:
+                _collect_single(col, res)
+            else:
+                _collect_batch(col, res, by_appid)
         return col
 
     # ================================================================ etapa 3
@@ -236,59 +240,67 @@ class Pipeline:
 
     def _aggregate(self, run_id, games, col: Collected, matches, failures) -> tuple[int, int]:
         ts = db.now()
-        c = self.conn
-        n_offers = n_flags = 0
         games_by_id = {g["id"]: g for g in games}
-        by_game = col.offers
-
+        n_offers = n_flags = 0
         for mr in matches:
-            offers = by_game[mr.game_id]
-            platforms = set(games_by_id[mr.game_id]["platforms"])
-            for idx, sc in mr.accepted:
-                o = offers[idx]
-                c.execute("""INSERT INTO price_observations (run_id, game_id, store, title_seen, price,
-                             regular_price, currency, format, platform, url, match_score, observed_at)
-                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                          (run_id, mr.game_id, o.store, o.title, o.price, o.regular_price, o.currency,
-                           o.format, o.platform, o.url, round(sc, 4), ts))
-                if o.platform:
-                    platforms.add(o.platform)
-                n_offers += 1
-            if platforms != set(games_by_id[mr.game_id]["platforms"]):
-                db.upsert_game(c, {"canonical_title": games_by_id[mr.game_id]["canonical_title"],
-                                   "steam_appid": games_by_id[mr.game_id]["steam_appid"],
-                                   "platforms": sorted(platforms)})
-            for store, cand, sc, reason in mr.flags:
-                c.execute("INSERT INTO match_flags (run_id, game_id, store, candidate, score, reason) "
-                          "VALUES (?,?,?,?,?,?)", (run_id, mr.game_id, store, cand, round(sc, 4), reason))
-                n_flags += 1
-
-        for gid, r in col.ratings:
-            c.execute("INSERT INTO ratings (run_id, game_id, source, score, votes, platform, observed_at) "
-                      "VALUES (?,?,?,?,?,?,?)", (run_id, gid, r.source, r.score, r.votes, r.platform, ts))
-        for gid, d in col.durations:
-            c.execute("INSERT INTO durations (run_id, game_id, main_h, plus_h, comp_h, observed_at) "
-                      "VALUES (?,?,?,?,?,?)", (run_id, gid, d.main_h, d.plus_h, d.comp_h, ts))
-        for gid, src in col.ok:
-            c.execute("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,?,?,1)
-                         ON CONFLICT(game_id, source) DO UPDATE SET last_ok=excluded.last_ok,
-                         last_try=excluded.last_try, ok=1""", (gid, src, ts, ts))
-
+            offers, flags = self._save_match(run_id, ts, games_by_id[mr.game_id], col.offers[mr.game_id], mr)
+            n_offers += offers
+            n_flags += flags
+        self._save_source_data(run_id, ts, col)
         by_appid = {g["steam_appid"]: g["id"] for g in games if g.get("steam_appid")}
         for f in failures:
-            gid = f.job.req.game_id
-            c.execute("INSERT INTO failures (run_id, source, game_id, url, error, recovered) VALUES (?,?,?,?,?,?)",
-                      (run_id, f.job.req.source, gid, f.job.req.url, f.error, int(f.recovered)))
-            if f.recovered:
-                continue
-            # Una solicitud por lote que falla deja desactualizados a todos los juegos del lote.
-            stale = [gid] if gid is not None else [by_appid[a] for a in _appids_in(f.job.req.url) if a in by_appid]
-            for g in stale:
-                c.execute("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,NULL,?,0)
-                             ON CONFLICT(game_id, source) DO UPDATE SET last_try=excluded.last_try, ok=0""",
-                          (g, f.job.req.source, ts))
-        c.commit()
+            self._save_failure(run_id, ts, f, by_appid)
+        self.conn.commit()
         return n_offers, n_flags
+
+    def _save_match(self, run_id, ts, game: dict, offers: list, mr) -> tuple[int, int]:
+        """Guarda las ofertas aceptadas y las banderas de un juego; suma plataformas nuevas."""
+        c = self.conn
+        platforms = set(game["platforms"])
+        for idx, sc in mr.accepted:
+            o = offers[idx]
+            c.execute("""INSERT INTO price_observations (run_id, game_id, store, title_seen, price,
+                         regular_price, currency, format, platform, url, match_score, observed_at)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (run_id, mr.game_id, o.store, o.title, o.price, o.regular_price, o.currency,
+                       o.format, o.platform, o.url, round(sc, 4), ts))
+            if o.platform:
+                platforms.add(o.platform)
+        if platforms != set(game["platforms"]):
+            db.upsert_game(c, {"canonical_title": game["canonical_title"], "steam_appid": game["steam_appid"],
+                               "platforms": sorted(platforms)})
+        c.executemany("INSERT INTO match_flags (run_id, game_id, store, candidate, score, reason) VALUES (?,?,?,?,?,?)",
+                      [(run_id, mr.game_id, store, cand, round(sc, 4), reason) for store, cand, sc, reason in mr.flags])
+        return len(mr.accepted), len(mr.flags)
+
+    def _save_source_data(self, run_id, ts, col: Collected) -> None:
+        """Calificaciones, duraciones y estado 'al día' de cada (juego, fuente)."""
+        c = self.conn
+        c.executemany("INSERT INTO ratings (run_id, game_id, source, score, votes, platform, observed_at) "
+                      "VALUES (?,?,?,?,?,?,?)",
+                      [(run_id, gid, r.source, r.score, r.votes, r.platform, ts) for gid, r in col.ratings])
+        c.executemany("INSERT INTO durations (run_id, game_id, main_h, plus_h, comp_h, observed_at) "
+                      "VALUES (?,?,?,?,?,?)",
+                      [(run_id, gid, d.main_h, d.plus_h, d.comp_h, ts) for gid, d in col.durations])
+        c.executemany("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,?,?,1)
+                         ON CONFLICT(game_id, source) DO UPDATE SET last_ok=excluded.last_ok,
+                         last_try=excluded.last_try, ok=1""", [(gid, src, ts, ts) for gid, src in col.ok])
+
+    def _save_failure(self, run_id, ts, f: Failure, by_appid: dict[int, int]) -> None:
+        """Registra el fallo y, si no se recuperó, marca la fuente como desactualizada."""
+        req = f.job.req
+        self.conn.execute("INSERT INTO failures (run_id, source, game_id, url, error, recovered) VALUES (?,?,?,?,?,?)",
+                          (run_id, req.source, req.game_id, req.url, f.error, int(f.recovered)))
+        if f.recovered:
+            return
+        # Una solicitud por lote que falla deja desactualizados a todos los juegos del lote.
+        if req.game_id is not None:
+            stale = [req.game_id]
+        else:
+            stale = [by_appid[a] for a in _appids_in(req.url) if a in by_appid]
+        self.conn.executemany("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,NULL,?,0)
+                                 ON CONFLICT(game_id, source) DO UPDATE SET last_try=excluded.last_try, ok=0""",
+                              [(g, req.source, ts) for g in stale])
 
     # ================================================================ ejecución completa
 
