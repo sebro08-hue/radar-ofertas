@@ -21,7 +21,7 @@ import re
 import threading
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import db, scrapers
 from .http_client import FetchError, HttpClient
@@ -30,6 +30,7 @@ from .scrapers.base import ParseResult, Request, Scraper
 
 MODES = ("sequential", "concurrent", "parallel")
 BLOCK_ERRORS = ("HTTP 403", "HTTP 503", "circuito abierto")
+NOT_FOUND = ("HTTP 404", "HTTP 410")
 
 
 @dataclass
@@ -39,6 +40,7 @@ class Collected:
     ratings: list[tuple[int, object]] = field(default_factory=list)
     durations: list[tuple[int, object]] = field(default_factory=list)
     ok: set[tuple[int, str]] = field(default_factory=set)            # (game_id, fuente) con datos frescos
+    game_updates: dict[int, dict] = field(default_factory=dict)      # game_id -> campos a guardar
 
 
 def _appids_in(url: str) -> list[int]:
@@ -60,6 +62,8 @@ def _collect_single(col: Collected, res: ParseResult) -> None:
     if res.duration:
         col.durations.append((gid, res.duration))
     col.ok.add((gid, res.request.source))
+    if res.game_updates:
+        col.game_updates.setdefault(gid, {}).update(res.game_updates)
 
 
 def _collect_batch(col: Collected, res: ParseResult, by_appid: dict[int, dict]) -> None:
@@ -120,11 +124,18 @@ class Pipeline:
         sd = scrapers.SteamDiscover(d["pages"], d["page_size"])
         jobs = [FetchJob(r, sd, None) for r in sd.page_requests()]
         results, failures = self._fetch_and_parse(jobs, self.workers["discover"])
-        count = 0
+        seen: set[int] = set()
         for res in results:
             for g in res.games:
                 db.upsert_game(self.conn, g)
-                count += 1
+                seen.add(g["steam_appid"])
+        count = len(seen)
+        # Solo se retiran juegos si se leyó el listado completo: con páginas
+        # faltantes, un juego "ausente" puede estar en la página que falló.
+        if not failures and count:
+            retired = db.retire_missing(self.conn, seen)
+            if retired:
+                print(f"  [discover] {retired} juegos ya no están en el listado y salen del catálogo")
         self.conn.commit()
         for f in failures:
             print(f"  [discover] falló {f.job.req.url}: {f.error}")
@@ -133,7 +144,22 @@ class Pipeline:
     # ================================================================ etapas 1-2
 
     def _fetch_one(self, job: FetchJob) -> str:
-        return self.http.get(job.req.url, cookies=dict(job.req.cookies) or None)
+        """Descarga la URL de la solicitud; si responde 404/410, prueba sus alternativas
+        en orden. La que funciona queda en job.req para que el parser sepa cuál fue.
+        Cada job lo maneja un solo hilo, así que modificarlo aquí es seguro."""
+        cookies = dict(job.req.cookies) or None
+        urls = (job.req.url, *job.req.alternates)
+        for i, url in enumerate(urls):
+            try:
+                body = self.http.get(url, cookies=cookies)
+            except FetchError as exc:
+                if i < len(urls) - 1 and exc.reason in NOT_FOUND:
+                    continue
+                raise
+            if i:
+                job.req = replace(job.req, url=url, alternates=())
+            return body
+        raise AssertionError("inalcanzable")
 
     def _parse_one(self, job: FetchJob, body: str) -> ParseResult:
         return job.scraper.parse(job.game, job.req, body)
@@ -299,6 +325,8 @@ class Pipeline:
         c.executemany("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,?,?,1)
                          ON CONFLICT(game_id, source) DO UPDATE SET last_ok=excluded.last_ok,
                          last_try=excluded.last_try, ok=1""", [(gid, src, ts, ts) for gid, src in col.ok])
+        for gid, fields in col.game_updates.items():
+            db.update_game_fields(c, gid, fields)
 
     def _save_failure(self, run_id, ts, f: Failure, by_appid: dict[int, int]) -> None:
         """Registra el fallo y, si no se recuperó, marca la fuente como desactualizada."""

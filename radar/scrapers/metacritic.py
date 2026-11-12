@@ -1,7 +1,9 @@
 """Metacritic (HTML): Metascore desde el JSON-LD de la página del juego.
 
 La búsqueda de Metacritic se carga con JavaScript, así que se va directo a
-/game/<slug>/. El slug sale de `games.metacritic_slug` o se deduce del título.
+/game/<slug>/. Si el juego ya tiene `metacritic_slug`, se usa ese. Si no, se prueban
+hasta 4 slugs deducidos del título, en orden, hasta que uno responda; el que funciona
+se guarda en el juego y desde la siguiente ejecución cuesta una sola solicitud.
 """
 from __future__ import annotations
 
@@ -10,17 +12,52 @@ import unicodedata
 
 from .base import ParseResult, Rating, Request, Scraper
 
+BASE = "https://www.metacritic.com/game/"
+MAX_CANDIDATES = 4
 RATING = re.compile(r'"ratingValue"\s*:\s*"?(\d+(?:\.\d+)?)')
 COUNT = re.compile(r'"reviewCount"\s*:\s*"?(\d+)')
+
+# "- GOTY Edition", ": 2026 Edition", " – The Definitive Edition", "Enhanced"...
+EDITION_SUFFIX = re.compile(
+    r"\s*(?:[-–:]\s*)?(?:the\s+)?(?:\d+(?:st|nd|rd|th)?\s+)?"
+    r"(?:\d{4}|goty|game of the year|definitive|enhanced|complete|deluxe|ultimate|anniversary|"
+    r"remastered|director'?s cut)(?:\s+edition)?\s*$", re.I)
+PAREN_YEAR = re.compile(r"\s*\(\d{4}\)")
+BRAND_PREFIX = re.compile(r"^(?:EA SPORTS|EA)\s*™?\s+", re.I)
+ROMAN = {"2": "ii", "3": "iii", "4": "iv", "5": "v", "6": "vi", "7": "vii", "8": "viii", "9": "ix"}
 
 
 def slugify(title: str) -> str:
     t = re.sub(r"[™®©]", "", title)            # antes de NFKD, que convierte ™ en "TM"
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().lower()
-    t = t.replace("&", " ").replace("'", "")
+    t = t.replace("&", " ").replace("'", "").replace(".", "")   # S.T.A.L.K.E.R. -> stalker
     t = re.sub(r"(?<=\d),(?=\d)", "", t)       # "40,000" -> "40000"
     t = re.sub(r"[^a-z0-9]+", "-", t)
     return t.strip("-")
+
+
+def _strip_edition(title: str) -> str:
+    t = PAREN_YEAR.sub("", title)
+    for _ in range(2):                          # "… (2020) 40th Anniversary Edition"
+        t = EDITION_SUFFIX.sub("", t)
+    return t.strip(" -–:")
+
+
+def _roman(slug: str) -> str:
+    return "-".join(ROMAN.get(part, part) for part in slug.split("-"))
+
+
+def slug_candidates(title: str) -> list[str]:
+    """Slugs posibles, del más literal al más libre."""
+    clean = BRAND_PREFIX.sub("", _strip_edition(title))
+    cands = [slugify(title), slugify(_strip_edition(title)), slugify(clean), _roman(slugify(clean))]
+    if title.rstrip().endswith("-"):           # Metacritic conserva el guion final: "guilty-gear-strive-"
+        cands.append(slugify(title) + "-")
+    out: list[str] = []
+    for c in cands:
+        if c and c not in out:
+            out.append(c)
+    return out[:MAX_CANDIDATES]
 
 
 class Metacritic(Scraper):
@@ -28,8 +65,12 @@ class Metacritic(Scraper):
     kind = "rating"
 
     def requests_for(self, game) -> list[Request]:
-        slug = game.get("metacritic_slug") or slugify(game["canonical_title"])
-        return [Request(self.name, f"https://www.metacritic.com/game/{slug}/", game["id"])]
+        if game.get("metacritic_slug"):
+            slugs = [game["metacritic_slug"]]
+        else:
+            slugs = slug_candidates(game["canonical_title"])
+        urls = [f"{BASE}{s}/" for s in slugs]
+        return [Request(self.name, urls[0], game["id"], alternates=tuple(urls[1:]))]
 
     def parse(self, game, req, body) -> ParseResult:
         res = ParseResult(req)
@@ -37,4 +78,6 @@ class Metacritic(Scraper):
         if m:
             c = COUNT.search(body)
             res.ratings.append(Rating("metacritic", float(m.group(1)), int(c.group(1)) if c else None))
+            if game and not game.get("metacritic_slug"):
+                res.game_updates["metacritic_slug"] = req.url.removeprefix(BASE).strip("/")
         return res

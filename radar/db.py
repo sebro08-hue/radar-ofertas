@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS games (
     kind            TEXT NOT NULL DEFAULT 'game', -- game | game+dlc | dlc | other
     hard_case       INTEGER NOT NULL DEFAULT 0,   -- caso difícil de emparejamiento
     active          INTEGER NOT NULL DEFAULT 1,
-    added_at        TEXT NOT NULL
+    added_at        TEXT NOT NULL,
+    origin          TEXT NOT NULL DEFAULT 'manual' -- discover | manual
 );
 
 -- Historial: cada observación se agrega, nunca se sobrescribe.
@@ -129,7 +130,18 @@ def connect(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Cambios de esquema para bases creadas con versiones anteriores."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(games)")}
+    if "origin" not in cols:
+        # Hasta ahora todo juego con steam_appid salió del descubrimiento.
+        conn.execute("ALTER TABLE games ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
+        conn.execute("UPDATE games SET origin='discover' WHERE steam_appid IS NOT NULL")
+        conn.commit()
 
 
 # ---------------------------------------------------------------- juegos
@@ -148,11 +160,14 @@ def upsert_game(conn: sqlite3.Connection, g: dict) -> int:
     for k in ("alt_titles", "platforms"):
         if g.get(k) is not None:
             fields[k] = json.dumps(g[k], ensure_ascii=False)
+    if g.get("origin") == "discover":
+        fields["active"] = 1                  # reaparece en el listado: vuelve al catálogo
     if row:
         sets = ", ".join(f"{k}=?" for k in fields)
         conn.execute(f"UPDATE games SET {sets} WHERE id=?", (*fields.values(), row["id"]))
         return row["id"]
     fields["added_at"] = now()
+    fields["origin"] = g.get("origin") or "manual"   # el origen solo se fija al crear el juego
     cols = ", ".join(fields)
     marks = ", ".join("?" for _ in fields)
     cur = conn.execute(f"INSERT INTO games ({cols}) VALUES ({marks})", tuple(fields.values()))
@@ -170,6 +185,28 @@ def load_games(conn: sqlite3.Connection, limit: int | None = None) -> list[dict]
         g["platforms"] = json.loads(g["platforms"])
         games.append(g)
     return games
+
+
+UPDATABLE_FIELDS = {"metacritic_slug", "hltb_id", "image_url"}
+
+
+def update_game_fields(conn: sqlite3.Connection, game_id: int, fields: dict) -> None:
+    """Actualiza campos de un juego que una fuente descubrió (lista blanca de columnas)."""
+    fields = {k: v for k, v in fields.items() if k in UPDATABLE_FIELDS}
+    if fields:
+        sets = ", ".join(f"{k}=?" for k in fields)
+        conn.execute(f"UPDATE games SET {sets} WHERE id=?", (*fields.values(), game_id))  # NOSONAR: columnas de lista blanca
+
+
+def retire_missing(conn: sqlite3.Connection, seen_appids: set[int]) -> int:
+    """Desactiva los juegos que vinieron del descubrimiento y ya no aparecen en el listado.
+    No borra nada: el historial de precios se conserva y el juego vuelve si reaparece.
+    Los juegos agregados a mano (origin='manual') nunca se tocan."""
+    active = [r[0] for r in conn.execute(
+        "SELECT steam_appid FROM games WHERE origin='discover' AND active=1 AND steam_appid IS NOT NULL")]
+    gone = [a for a in active if a not in seen_appids]
+    conn.executemany("UPDATE games SET active=0 WHERE steam_appid=?", [(a,) for a in gone])
+    return len(gone)
 
 
 def last_tries(conn: sqlite3.Connection, source: str) -> dict[int, str]:

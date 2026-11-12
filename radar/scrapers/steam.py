@@ -64,8 +64,9 @@ class SteamDiscover(Scraper):
         self.pages, self.page_size = pages, page_size
 
     def page_requests(self) -> list[Request]:
+        # category1=998: solo juegos (sin DLC, software, hardware ni bandas sonoras).
         return [Request(self.name,
-                        f"{BASE}?filter=topsellers&cc=us&infinite=1&count={self.page_size}"
+                        f"{BASE}?filter=topsellers&category1=998&cc=us&infinite=1&count={self.page_size}"
                         f"&start={p * self.page_size}")
                 for p in range(self.pages)]
 
@@ -73,6 +74,8 @@ class SteamDiscover(Scraper):
         res = ParseResult(req)
         for r in _rows(body):
             if r["kind"] != "app" or not r["appid"]:
+                continue
+            if not r["price"]:                  # gratis: no hay precio que comparar
                 continue
             if r["review_pct"] is not None:
                 res.ratings.append(Rating("steam_users", r["review_pct"], r["review_votes"], "PC",
@@ -84,6 +87,7 @@ class SteamDiscover(Scraper):
                 "msrp": r["regular"] or r["price"],
                 "platforms": ["PC"],
                 "image_url": f"https://cdn.akamai.steamstatic.com/steam/apps/{r['appid']}/header.jpg",
+                "origin": "discover",
             })
         return res
 

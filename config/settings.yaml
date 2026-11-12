@@ -69,7 +69,7 @@ rotation:
 
 # Etapa 0: descubrimiento del catálogo (Steam Top Sellers, paginado).
 discover:
-  pages: 12          # 12 x 50 = 600 candidatos
+  pages: 16          # 16 x 50 = 800 juegos; sin los gratis quedan más de 500
   page_size: 50
 
 matching:
