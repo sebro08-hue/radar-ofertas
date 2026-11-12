@@ -19,6 +19,7 @@ class Request:
     url: str
     game_id: int | None = None
     cookies: tuple = ()          # tupla de pares para que el Request sea hashable / picklable
+    alternates: tuple = ()       # URLs a probar en orden si `url` responde 404/410
 
 
 @dataclass
@@ -59,6 +60,7 @@ class ParseResult:
     ratings: list[Rating] = field(default_factory=list)
     duration: Duration | None = None
     games: list[dict] = field(default_factory=list)   # solo para descubrimiento (etapa 0)
+    game_updates: dict = field(default_factory=dict)  # campos a guardar en el juego (p. ej. el slug que funcionó)
 
 
 class Scraper:
