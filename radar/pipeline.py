@@ -46,6 +46,12 @@ def _appids_in(url: str) -> list[int]:
     return [int(x) for x in m.group(1).split(",")] if m else []
 
 
+def pick_rotation(games: list[dict], last_try: dict[int, str], n: int) -> list[dict]:
+    """Los n juegos con el último intento más antiguo; los nunca intentados van primero.
+    Empata por id para que el orden sea estable entre ejecuciones."""
+    return sorted(games, key=lambda g: (last_try.get(g["id"], ""), g["id"]))[:n]
+
+
 def _collect_single(col: Collected, res: ParseResult) -> None:
     """Resultado de una solicitud hecha para un juego concreto."""
     gid = res.request.game_id
@@ -193,6 +199,14 @@ class Pipeline:
                 f.error = f"{f.error} | final: {exc}"
         return out
 
+    def _games_for(self, source: str, games: list[dict]) -> list[dict]:
+        """Juegos a consultar en una fuente. Con rotación, los N consultados hace más
+        tiempo (los nunca consultados primero); sin rotación, todos."""
+        n = self.s.rotation_size(source)
+        if not n or n >= len(games):
+            return games
+        return pick_rotation(games, db.last_tries(self.conn, source), n)
+
     @staticmethod
     def _collect(games: list[dict], results: list[ParseResult]) -> Collected:
         """Asigna cada resultado a su juego: por game_id de la solicitud o, en las
@@ -319,7 +333,9 @@ class Pipeline:
         games = db.load_games(self.conn, limit)
         active = scrapers.build(self.s["sources"])
         jobs = [FetchJob(r, sc, None) for sc in active.values() for r in sc.batch_requests(games)]
-        jobs += [FetchJob(r, sc, g) for g in games for sc in active.values() for r in sc.requests_for(g)]
+        for name, sc in active.items():
+            for g in self._games_for(name, games):
+                jobs += [FetchJob(r, sc, g) for r in sc.requests_for(g)]
         rep.requests = len(jobs)
 
         t = time.perf_counter()

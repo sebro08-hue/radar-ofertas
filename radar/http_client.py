@@ -69,6 +69,10 @@ class HttpClient:
         self._local = threading.local()
         self._sem_lock = threading.Lock()
         self._sems: dict[str, threading.BoundedSemaphore] = {}
+        # Pausa mínima por dominio: un lock por dominio + el instante en que se permite
+        # la próxima solicitud. Quien tiene el lock duerme lo necesario y corre la marca.
+        self._pace_locks: dict[str, threading.Lock] = defaultdict(threading.Lock)
+        self._next_allowed: dict[str, float] = defaultdict(float)
         self._stats_lock = threading.Lock()
         self.stats: dict[str, dict[str, int]] = defaultdict(lambda: {"ok": 0, "retried": 0, "failed": 0})
 
@@ -90,6 +94,20 @@ class HttpClient:
                 sem = threading.BoundedSemaphore(self.s.domain_limit(key))
                 self._sems[key] = sem
             return sem
+
+    def _pace(self, domain: str) -> None:
+        """Espera hasta que hayan pasado `per_domain_interval_s` desde la solicitud
+        anterior al mismo dominio. Solo en modo live."""
+        interval = self.s.domain_interval(domain) if self.source == "live" else 0.0
+        if interval <= 0:
+            return
+        with self._sem_lock:                       # crear el lock del dominio sin carreras
+            lock = self._pace_locks[domain]
+        with lock:
+            wait = self._next_allowed[domain] - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            self._next_allowed[domain] = time.monotonic() + interval
 
     def _count(self, domain: str, field: str) -> None:
         with self._stats_lock:
@@ -159,6 +177,7 @@ class HttpClient:
                 self._sleep_backoff(attempt)
             try:
                 with sem:
+                    self._pace(domain)
                     resp = self._session().get(target, cookies=cookies, timeout=self.timeout)
             except requests.RequestException as exc:
                 last_reason = type(exc).__name__
