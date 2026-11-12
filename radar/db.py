@@ -195,7 +195,8 @@ def update_game_fields(conn: sqlite3.Connection, game_id: int, fields: dict) -> 
     fields = {k: v for k, v in fields.items() if k in UPDATABLE_FIELDS}
     if fields:
         sets = ", ".join(f"{k}=?" for k in fields)
-        conn.execute(f"UPDATE games SET {sets} WHERE id=?", (*fields.values(), game_id))  # NOSONAR: columnas de lista blanca
+        # Los nombres de columna salen de UPDATABLE_FIELDS (lista blanca); los valores van como parámetros.
+        conn.execute(f"UPDATE games SET {sets} WHERE id=?", (*fields.values(), game_id))  # NOSONAR
 
 
 def retire_missing(conn: sqlite3.Connection, seen_appids: set[int]) -> int:

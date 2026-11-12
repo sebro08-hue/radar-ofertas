@@ -17,12 +17,13 @@ MAX_CANDIDATES = 4
 RATING = re.compile(r'"ratingValue"\s*:\s*"?(\d+(?:\.\d+)?)')
 COUNT = re.compile(r'"reviewCount"\s*:\s*"?(\d+)')
 
-# "- GOTY Edition", ": 2026 Edition", " – The Definitive Edition", "Enhanced"...
-EDITION_SUFFIX = re.compile(
-    r"\s*(?:[-–:]\s*)?(?:the\s+)?(?:\d+(?:st|nd|rd|th)?\s+)?"
-    r"(?:\d{4}|goty|game of the year|definitive|enhanced|complete|deluxe|ultimate|anniversary|"
-    r"remastered|director'?s cut)(?:\s+edition)?\s*$", re.I)
-PAREN_YEAR = re.compile(r"\s*\(\d{4}\)")
+# Palabras que marcan una edición al final del título: "- GOTY Edition",
+# ": 2026 Edition", " – The Definitive Edition", "Enhanced", "Director's Cut"...
+EDITION_WORDS = {"edition", "goty", "game", "of", "the", "year", "definitive", "enhanced", "complete",
+                 "deluxe", "ultimate", "anniversary", "remastered", "director's", "directors", "cut"}
+SEPARATORS = {"-", "–", "—", ":"}
+ORDINAL_OR_YEAR = re.compile(r"\d+(?:st|nd|rd|th)?")
+PAREN_YEAR = re.compile(r"\(\d{4}\)")
 BRAND_PREFIX = re.compile(r"^(?:EA SPORTS|EA)\s*™?\s+", re.I)
 ROMAN = {"2": "ii", "3": "iii", "4": "iv", "5": "v", "6": "vi", "7": "vii", "8": "viii", "9": "ix"}
 
@@ -37,10 +38,24 @@ def slugify(title: str) -> str:
 
 
 def _strip_edition(title: str) -> str:
-    t = PAREN_YEAR.sub("", title)
-    for _ in range(2):                          # "… (2020) 40th Anniversary Edition"
-        t = EDITION_SUFFIX.sub("", t)
-    return t.strip(" -–:")
+    """Quita la edición del final del título, palabra por palabra desde atrás.
+    Un año u ordinal ("2026", "40th") solo se quita si va pegado a la edición, sin un
+    separador de por medio: "Sea of Thieves: 2026 Edition" -> "Sea of Thieves", pero
+    "Original Sin 2 - Definitive Edition" conserva el 2 y "Madden NFL 27" no cambia."""
+    words = PAREN_YEAR.sub(" ", title).split()
+    removed_edition = crossed_separator = False
+    while len(words) > 1:
+        w = words[-1].strip(":").lower()
+        if w in EDITION_WORDS:
+            removed_edition = removed_edition or w not in {"of", "the"}
+        elif w in SEPARATORS or w == "":
+            crossed_separator = True
+        elif not (removed_edition and not crossed_separator and ORDINAL_OR_YEAR.fullmatch(w)):
+            break
+        words.pop()
+    if not removed_edition:
+        return title.strip()
+    return " ".join(words).rstrip(" -–—:")
 
 
 def _roman(slug: str) -> str:

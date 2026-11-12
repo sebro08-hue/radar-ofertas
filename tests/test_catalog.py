@@ -28,6 +28,20 @@ class SlugCandidatesTest(unittest.TestCase):
         for title, slug in self.CASES.items():
             self.assertIn(slug, slug_candidates(title), title)
 
+    def test_edition_stripping_keeps_sequel_numbers(self):
+        from radar.scrapers.metacritic import _strip_edition
+        self.assertEqual(_strip_edition("Divinity: Original Sin 2 - Definitive Edition"), "Divinity: Original Sin 2")
+        self.assertEqual(_strip_edition("Sea of Thieves: 2026 Edition"), "Sea of Thieves")
+        self.assertEqual(_strip_edition("Madden NFL 27"), "Madden NFL 27")
+        self.assertEqual(_strip_edition("Game of Thrones"), "Game of Thrones")
+
+    def test_long_titles_are_linear(self):
+        import time
+        evil = "a" + " -" * 20000 + " x"
+        t = time.perf_counter()
+        slug_candidates(evil)
+        self.assertLess(time.perf_counter() - t, 0.5)
+
     def test_exact_title_first_and_at_most_four(self):
         c = slug_candidates("Divinity: Original Sin 2 - Definitive Edition")
         self.assertEqual(c[0], "divinity-original-sin-2-definitive-edition")
