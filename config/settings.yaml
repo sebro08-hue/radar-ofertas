@@ -56,6 +56,17 @@ per_domain_limit:
   howlongtobeat.com: 2
   127.0.0.1: 64
 
+# Pausa mínima (segundos) entre el inicio de dos solicitudes al mismo dominio.
+# Solo en modo live: en replay no hay sitio que cuidar y falsearía las mediciones.
+per_domain_interval_s:
+  www.amazon.com: 4
+
+# Rotación: fuentes que no se consultan para todo el catálogo en cada ejecución,
+# sino para los N juegos consultados hace más tiempo (o nunca). Con 100 juegos
+# por día, Amazon recorre un catálogo de 600 cada 6 días.
+rotation:
+  amazon: 100
+
 # Etapa 0: descubrimiento del catálogo (Steam Top Sellers, paginado).
 discover:
   pages: 12          # 12 x 50 = 600 candidatos

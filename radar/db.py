@@ -172,6 +172,12 @@ def load_games(conn: sqlite3.Connection, limit: int | None = None) -> list[dict]
     return games
 
 
+def last_tries(conn: sqlite3.Connection, source: str) -> dict[int, str]:
+    """Último intento (exitoso o no) de cada juego en una fuente."""
+    return {r[0]: r[1] for r in conn.execute(
+        "SELECT game_id, last_try FROM source_status WHERE source=?", (source,))}
+
+
 # ---------------------------------------------------------------- ejecuciones
 
 def start_run(conn, mode: str, source: str, workers: dict) -> int:

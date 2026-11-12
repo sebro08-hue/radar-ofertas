@@ -102,11 +102,13 @@ Mide precisión y exhaustividad contra `data/validation_pairs.csv` (pares revisa
 |---|---|---|
 | Steam | catálogo, precio, reseñas de usuarios | HTML (catálogo) y API de precios por lotes de 100 |
 | GOG | precio | API pública de catálogo |
-| Amazon | precio (físico y digital) | HTML |
+| Amazon | precio (físico y digital) | HTML, 100 juegos por día en rotación |
 | Metacritic | Metascore | HTML |
 | How Long To Beat | duración | HTML, por id del juego |
 
 El scraper se identifica con su propio User-Agent, limita las solicitudes por dominio, usa caché local y no intenta saltarse bloqueos ni CAPTCHAs. Si un sitio rechaza las solicitudes varias veces seguidas, un cortacircuitos deja de consultarlo el resto de la ejecución y sus datos quedan marcados como desactualizados.
+
+Los sitios más sensibles se consultan con una pausa mínima entre solicitudes (`per_domain_interval_s`) y en rotación (`rotation`): cada día se revisan los juegos que llevan más tiempo sin consultarse, y el sitio muestra la fecha de cada precio.
 
 ## Estructura
 

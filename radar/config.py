@@ -29,6 +29,13 @@ class Settings(dict):
         limits = self["per_domain_limit"]
         return int(limits.get(domain, limits["default"]))
 
+    def domain_interval(self, domain: str) -> float:
+        return float((self.get("per_domain_interval_s") or {}).get(domain, 0))
+
+    def rotation_size(self, source: str) -> int | None:
+        n = (self.get("rotation") or {}).get(source)
+        return int(n) if n else None
+
 
 def load(path: str | Path | None = None, overrides: dict | None = None) -> Settings:
     with open(path or DEFAULT_PATH, encoding="utf-8") as fh:
