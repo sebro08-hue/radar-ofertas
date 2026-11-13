@@ -11,11 +11,23 @@ El pipeline es el mismo en ambos modos; solo cambia de dónde salen los bytes.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import random
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+
+def is_loopback(host: str) -> bool:
+    """True si el host es la propia máquina. El replay usa HTTP sin cifrar, así que
+    solo se permite en la interfaz local."""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def key_for(url: str) -> str:
@@ -67,6 +79,8 @@ def make_handler(replay_dir: Path, latency_ms: float, jitter_ms: float, seed: in
 class ReplayServer:
     def __init__(self, replay_dir: Path, host: str, port: int,
                  latency_ms: float, jitter_ms: float = 0.0, seed: int | None = 42):
+        if not is_loopback(host):
+            raise ValueError(f"el servidor de replay solo puede escuchar en la propia máquina, no en {host!r}")
         handler = make_handler(replay_dir, latency_ms, jitter_ms, seed)
         ThreadingHTTPServer.daemon_threads = True
         ThreadingHTTPServer.request_queue_size = 256

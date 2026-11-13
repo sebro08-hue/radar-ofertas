@@ -27,16 +27,19 @@ RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 BLOCK_STATUS = {401, 403, 412}   # el sitio rechaza al cliente
 
 
-def _decode(resp: requests.Response) -> str:
-    """Decodifica sin `resp.text`: cuando el servidor no declara charset, `requests`
-    adivina la codificación analizando todo el cuerpo (~240 ms por página de 500 KB,
-    CPU pura dentro de la etapa de E/S). Si hay charset declarado se usa; si no, UTF-8."""
+def _declared_encoding(resp: requests.Response) -> str:
+    """Charset declarado por el servidor, o UTF-8. No se usa `resp.text`: sin charset
+    declarado, `requests` adivina la codificación analizando todo el cuerpo (~240 ms
+    por página de 500 KB, CPU pura dentro de la etapa de E/S)."""
     declared = "charset=" in resp.headers.get("Content-Type", "").lower()
-    encoding = resp.encoding if declared and resp.encoding else "utf-8"
+    return resp.encoding if declared and resp.encoding else "utf-8"
+
+
+def _decode(content: bytes, encoding: str) -> str:
     try:
-        return resp.content.decode(encoding, errors="replace")
+        return content.decode(encoding, errors="replace")
     except LookupError:                     # charset desconocido
-        return resp.content.decode("utf-8", errors="replace")
+        return content.decode("utf-8", errors="replace")
 
 
 class FetchError(Exception):
@@ -51,6 +54,9 @@ class HttpClient:
     def __init__(self, settings):
         self.s = settings
         self.source = settings["source"]
+        if self.source == "replay" and not replay.is_loopback(settings["replay"]["host"]):
+            raise ValueError("el servidor de replay debe escuchar en la propia máquina "
+                             f"(127.0.0.1, ::1 o localhost), no en {settings['replay']['host']!r}")
         self.replay_dir: Path = settings.path("replay_dir")
         self.capture = bool(settings["capture"]) and self.source == "live"
         self.cache_ttl_s = float(settings["cache_ttl_hours"]) * 3600
@@ -151,55 +157,84 @@ class HttpClient:
     # ------------------------------------------------------------- API
 
     def get(self, url: str, cookies: dict | None = None) -> str:
+        """Descarga y decodifica como texto."""
+        return _decode(*self._fetch(url, cookies))
+
+    def get_bytes(self, url: str, cookies: dict | None = None) -> bytes:
+        """Descarga sin decodificar (archivos comprimidos, imágenes...)."""
+        return self._fetch(url, cookies)[0]
+
+    def _fetch(self, url: str, cookies: dict | None) -> tuple[bytes, str]:
+        """Devuelve (contenido, codificación declarada). Reintenta con backoff los
+        errores de red y los estados reintentables; el resto falla de inmediato."""
         domain = urlsplit(url).hostname or "?"
+        cached = self._before_request(domain, url)
+        if cached is not None:
+            return cached, "utf-8"
+        target, sem = self._route(domain, url)
+
+        last_reason = "?"
+        for attempt in range(self.max_retries + 1):
+            if attempt:
+                if self.is_open(domain):
+                    break                   # otro hilo ya abrió el circuito: no seguir insistiendo
+                self._count(domain, "retried")
+                self._sleep_backoff(attempt)
+            resp, last_reason = self._send(domain, target, sem, cookies)
+            result = self._handle(domain, url, resp) if resp is not None else None
+            if result is not None:
+                return result
+        self._count(domain, "failed")
+        self._on_failure(domain)
+        raise FetchError(url, last_reason, retryable=True)
+
+    def _before_request(self, domain: str, url: str) -> bytes | None:
+        """Corta si el circuito del dominio está abierto; devuelve la copia en caché si la hay."""
         if self.is_open(domain):
             self._count(domain, "failed")
             raise FetchError(url, "circuito abierto", retryable=False)
         cached = self._cached(domain, url)
         if cached is not None:
             self._count(domain, "ok")
-            return cached.decode("utf-8", errors="replace")
+        return cached
 
-        if self.source == "replay":
-            r = self.s["replay"]
-            target = f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}"
-            sem = self._semaphore(r["host"])
-        else:
-            target = url
-            sem = self._semaphore(domain)
+    def _route(self, domain: str, url: str) -> tuple[str, threading.BoundedSemaphore]:
+        """URL a pedir y semáforo a respetar: el sitio real o el servidor de replay."""
+        if self.source != "replay":
+            return url, self._semaphore(domain)
+        r = self.s["replay"]
+        # El servidor de replay solo escucha en la propia máquina (se valida en __init__),
+        # así que este tráfico nunca sale a la red y HTTPS no aportaría nada.
+        target = f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}"  # NOSONAR
+        return target, self._semaphore(r["host"])
 
-        last_reason = "?"
-        for attempt in range(self.max_retries + 1):
-            if attempt and self.is_open(domain):
-                break                       # otro hilo ya abrió el circuito: no seguir insistiendo
-            if attempt:
-                self._count(domain, "retried")
-                self._sleep_backoff(attempt)
-            try:
-                with sem:
-                    self._pace(domain)
-                    resp = self._session().get(target, cookies=cookies, timeout=self.timeout)
-            except requests.RequestException as exc:
-                last_reason = type(exc).__name__
-                continue
-            if resp.status_code == 200:
-                self._count(domain, "ok")
-                self._on_success(domain)
-                if self.capture:
-                    replay.save_capture(self.replay_dir, domain, url, resp.content)
-                return _decode(resp)
-            last_reason = f"HTTP {resp.status_code}"
-            if resp.status_code not in RETRYABLE_STATUS:
-                # 403/404/412...: el sitio nos rechaza o no existe. No se insiste ni se intenta evadirlo.
-                self._count(domain, "failed")
-                if resp.status_code in BLOCK_STATUS:
-                    self._on_failure(domain)
-                else:
-                    self._on_success(domain)   # un 404 es una respuesta normal, no un bloqueo
-                raise FetchError(url, last_reason, retryable=False)
+    def _send(self, domain: str, target: str, sem, cookies) -> tuple[requests.Response | None, str]:
+        """Un intento. Devuelve (respuesta, motivo) o (None, nombre del error de red)."""
+        try:
+            with sem:
+                self._pace(domain)
+                resp = self._session().get(target, cookies=cookies, timeout=self.timeout)
+        except requests.RequestException as exc:
+            return None, type(exc).__name__
+        return resp, f"HTTP {resp.status_code}"
+
+    def _handle(self, domain: str, url: str, resp: requests.Response) -> tuple[bytes, str] | None:
+        """200: devuelve el contenido. Estado reintentable: None. Otro: falla sin reintentar."""
+        if resp.status_code == 200:
+            self._count(domain, "ok")
+            self._on_success(domain)
+            if self.capture:
+                replay.save_capture(self.replay_dir, domain, url, resp.content)
+            return resp.content, _declared_encoding(resp)
+        if resp.status_code in RETRYABLE_STATUS:
+            return None
+        # 403/404/412...: el sitio nos rechaza o no existe. No se insiste ni se intenta evadirlo.
         self._count(domain, "failed")
-        self._on_failure(domain)
-        raise FetchError(url, last_reason, retryable=True)
+        if resp.status_code in BLOCK_STATUS:
+            self._on_failure(domain)
+        else:
+            self._on_success(domain)       # un 404 es una respuesta normal, no un bloqueo
+        raise FetchError(url, f"HTTP {resp.status_code}", retryable=False)
 
     def snapshot_stats(self) -> dict:
         with self._stats_lock:

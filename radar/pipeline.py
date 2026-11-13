@@ -26,6 +26,7 @@ from dataclasses import dataclass, field, replace
 from . import db, scrapers
 from .http_client import FetchError, HttpClient
 from .matching import MatchTask, match_game, set_catalog
+from .scrapers import xbox
 from .scrapers.base import ParseResult, Request, Scraper
 
 MODES = ("sequential", "concurrent", "parallel")
@@ -139,7 +140,31 @@ class Pipeline:
         self.conn.commit()
         for f in failures:
             print(f"  [discover] falló {f.job.req.url}: {f.error}")
+        if "xbox" in self.s["sources"]:
+            self.link_xbox()
         return count, results
+
+    def link_xbox(self) -> int:
+        """Enlaza los juegos del catálogo con su página de Xbox Store usando los sitemaps
+        (xbox.com prohíbe las búsquedas en robots.txt). Devuelve cuántos enlazó."""
+        try:
+            sitemaps = xbox.us_sitemaps(self.http.get(xbox.SITEMAP_INDEX))
+        except FetchError as exc:
+            print(f"  [xbox] no se pudo leer el índice de sitemaps: {exc.reason}")
+            return 0
+        products: list[tuple[str, str]] = []
+        with ThreadPoolExecutor(max_workers=self.workers["discover"], thread_name_prefix="sitemap") as pool:
+            for url, fut in [(u, pool.submit(self.http.get_bytes, u)) for u in sitemaps]:
+                try:
+                    products += xbox.products_in_sitemap(fut.result())
+                except FetchError as exc:
+                    print(f"  [xbox] falló {url}: {exc.reason}")
+        linked = xbox.link(db.load_games(self.conn), xbox.build_index(products))
+        for gid, url in linked.items():
+            db.update_game_fields(self.conn, gid, {"xbox_url": url})
+        self.conn.commit()
+        print(f"  [xbox] {len(products)} productos en {len(sitemaps)} sitemaps; {len(linked)} juegos enlazados")
+        return len(linked)
 
     # ================================================================ etapas 1-2
 
@@ -362,8 +387,11 @@ class Pipeline:
         active = scrapers.build(self.s["sources"])
         jobs = [FetchJob(r, sc, None) for sc in active.values() for r in sc.batch_requests(games)]
         for name, sc in active.items():
-            for g in self._games_for(name, games):
-                jobs += [FetchJob(r, sc, g) for r in sc.requests_for(g)]
+            # Solo compiten por la rotación los juegos que la fuente puede consultar
+            # (p. ej. Xbox: los que tienen enlace).
+            requests = {g["id"]: sc.requests_for(g) for g in games}
+            for g in self._games_for(name, [g for g in games if requests[g["id"]]]):
+                jobs += [FetchJob(r, sc, g) for r in requests[g["id"]]]
         rep.requests = len(jobs)
 
         t = time.perf_counter()

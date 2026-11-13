@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS games (
     steam_appid     INTEGER UNIQUE,
     metacritic_slug TEXT,
     hltb_id         INTEGER,
+    xbox_url        TEXT,
     image_url       TEXT,
     kind            TEXT NOT NULL DEFAULT 'game', -- game | game+dlc | dlc | other
     hard_case       INTEGER NOT NULL DEFAULT 0,   -- caso difícil de emparejamiento
@@ -142,6 +143,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE games ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
         conn.execute("UPDATE games SET origin='discover' WHERE steam_appid IS NOT NULL")
         conn.commit()
+    if "xbox_url" not in cols:
+        conn.execute("ALTER TABLE games ADD COLUMN xbox_url TEXT")
+        conn.commit()
 
 
 # ---------------------------------------------------------------- juegos
@@ -187,7 +191,7 @@ def load_games(conn: sqlite3.Connection, limit: int | None = None) -> list[dict]
     return games
 
 
-UPDATABLE_FIELDS = {"metacritic_slug", "hltb_id", "image_url"}
+UPDATABLE_FIELDS = {"metacritic_slug", "hltb_id", "image_url", "xbox_url"}
 
 
 def update_game_fields(conn: sqlite3.Connection, game_id: int, fields: dict) -> None:

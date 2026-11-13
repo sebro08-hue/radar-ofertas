@@ -9,7 +9,7 @@ Comparador de precios de videojuegos. Revisa varias tiendas todos los días, emp
 ## Qué hace
 
 - Arma el catálogo automáticamente desde los más vendidos de Steam.
-- Consulta precios en Steam, GOG y Amazon; calificaciones de Metacritic y de usuarios de Steam; y duración en How Long To Beat.
+- Consulta precios en Steam, GOG, Xbox Store y Amazon; calificaciones de Metacritic y de usuarios de Steam; y duración en How Long To Beat.
 - Empareja títulos entre tiendas ("Zelda BOTW" vs. "The Legend of Zelda: Breath of the Wild – Nintendo Switch") con un algoritmo propio de similitud.
 - Guarda cada precio observado, sin sobrescribir, para mostrar el historial y marcar mínimos históricos.
 - Si una fuente falla, publica lo que tiene y avisa qué dato está desactualizado.
@@ -102,6 +102,7 @@ Mide precisión y exhaustividad contra `data/validation_pairs.csv` (pares revisa
 |---|---|---|
 | Steam | catálogo, precio, reseñas de usuarios | HTML (catálogo) y API de precios por lotes de 100 |
 | GOG | precio | API pública de catálogo |
+| Xbox Store | precio y plataformas (Xbox One, Series X\|S, PC) | HTML; enlace por sitemap, 150 juegos por día en rotación |
 | Amazon | precio (físico y digital) | HTML, 100 juegos por día en rotación |
 | Metacritic | Metascore | HTML |
 | How Long To Beat | duración | HTML, por id del juego |
