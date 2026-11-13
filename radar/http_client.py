@@ -27,16 +27,19 @@ RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 BLOCK_STATUS = {401, 403, 412}   # el sitio rechaza al cliente
 
 
-def _decode(resp: requests.Response) -> str:
-    """Decodifica sin `resp.text`: cuando el servidor no declara charset, `requests`
-    adivina la codificación analizando todo el cuerpo (~240 ms por página de 500 KB,
-    CPU pura dentro de la etapa de E/S). Si hay charset declarado se usa; si no, UTF-8."""
+def _declared_encoding(resp: requests.Response) -> str:
+    """Charset declarado por el servidor, o UTF-8. No se usa `resp.text`: sin charset
+    declarado, `requests` adivina la codificación analizando todo el cuerpo (~240 ms
+    por página de 500 KB, CPU pura dentro de la etapa de E/S)."""
     declared = "charset=" in resp.headers.get("Content-Type", "").lower()
-    encoding = resp.encoding if declared and resp.encoding else "utf-8"
+    return resp.encoding if declared and resp.encoding else "utf-8"
+
+
+def _decode(content: bytes, encoding: str) -> str:
     try:
-        return resp.content.decode(encoding, errors="replace")
+        return content.decode(encoding, errors="replace")
     except LookupError:                     # charset desconocido
-        return resp.content.decode("utf-8", errors="replace")
+        return content.decode("utf-8", errors="replace")
 
 
 class FetchError(Exception):
@@ -151,6 +154,15 @@ class HttpClient:
     # ------------------------------------------------------------- API
 
     def get(self, url: str, cookies: dict | None = None) -> str:
+        """Descarga y decodifica como texto."""
+        return _decode(*self._fetch(url, cookies))
+
+    def get_bytes(self, url: str, cookies: dict | None = None) -> bytes:
+        """Descarga sin decodificar (archivos comprimidos, imágenes...)."""
+        return self._fetch(url, cookies)[0]
+
+    def _fetch(self, url: str, cookies: dict | None) -> tuple[bytes, str]:
+        """Devuelve (contenido, codificación declarada)."""
         domain = urlsplit(url).hostname or "?"
         if self.is_open(domain):
             self._count(domain, "failed")
@@ -158,7 +170,7 @@ class HttpClient:
         cached = self._cached(domain, url)
         if cached is not None:
             self._count(domain, "ok")
-            return cached.decode("utf-8", errors="replace")
+            return cached, "utf-8"
 
         if self.source == "replay":
             r = self.s["replay"]
@@ -187,7 +199,7 @@ class HttpClient:
                 self._on_success(domain)
                 if self.capture:
                     replay.save_capture(self.replay_dir, domain, url, resp.content)
-                return _decode(resp)
+                return resp.content, _declared_encoding(resp)
             last_reason = f"HTTP {resp.status_code}"
             if resp.status_code not in RETRYABLE_STATUS:
                 # 403/404/412...: el sitio nos rechaza o no existe. No se insiste ni se intenta evadirlo.

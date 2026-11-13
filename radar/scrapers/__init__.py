@@ -5,6 +5,7 @@ from .gog import GogStore
 from .hltb import Hltb
 from .metacritic import Metacritic
 from .steam import SteamDiscover, SteamStore
+from .xbox import XboxStore
 
 REGISTRY: dict[str, type[Scraper]] = {
     "steam": SteamStore,
@@ -12,6 +13,7 @@ REGISTRY: dict[str, type[Scraper]] = {
     "amazon": AmazonStore,
     "metacritic": Metacritic,
     "hltb": Hltb,
+    "xbox": XboxStore,
 }
 
 

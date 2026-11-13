@@ -54,18 +54,21 @@ per_domain_limit:
   www.amazon.com: 1
   www.metacritic.com: 2
   howlongtobeat.com: 2
+  www.xbox.com: 2
   127.0.0.1: 64
 
 # Pausa mínima (segundos) entre el inicio de dos solicitudes al mismo dominio.
 # Solo en modo live: en replay no hay sitio que cuidar y falsearía las mediciones.
 per_domain_interval_s:
   www.amazon.com: 4
+  www.xbox.com: 1
 
 # Rotación: fuentes que no se consultan para todo el catálogo en cada ejecución,
 # sino para los N juegos consultados hace más tiempo (o nunca). Con 100 juegos
 # por día, Amazon recorre un catálogo de 600 cada 6 días.
 rotation:
   amazon: 100
+  xbox: 150          # cada página de producto pesa ~900 KB
 
 # Etapa 0: descubrimiento del catálogo (Steam Top Sellers, paginado).
 discover:
@@ -80,4 +83,4 @@ matching:
   compare_against_catalog: true
 
 # Fuentes activas (ver radar/scrapers/__init__.py).
-sources: [steam, gog, amazon, metacritic, hltb]
+sources: [steam, gog, xbox, amazon, metacritic, hltb]
