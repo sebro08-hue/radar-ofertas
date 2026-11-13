@@ -162,56 +162,73 @@ class HttpClient:
         return self._fetch(url, cookies)[0]
 
     def _fetch(self, url: str, cookies: dict | None) -> tuple[bytes, str]:
-        """Devuelve (contenido, codificación declarada)."""
+        """Devuelve (contenido, codificación declarada). Reintenta con backoff los
+        errores de red y los estados reintentables; el resto falla de inmediato."""
         domain = urlsplit(url).hostname or "?"
+        cached = self._before_request(domain, url)
+        if cached is not None:
+            return cached, "utf-8"
+        target, sem = self._route(domain, url)
+
+        last_reason = "?"
+        for attempt in range(self.max_retries + 1):
+            if attempt:
+                if self.is_open(domain):
+                    break                   # otro hilo ya abrió el circuito: no seguir insistiendo
+                self._count(domain, "retried")
+                self._sleep_backoff(attempt)
+            resp, last_reason = self._send(domain, target, sem, cookies)
+            result = self._handle(domain, url, resp) if resp is not None else None
+            if result is not None:
+                return result
+        self._count(domain, "failed")
+        self._on_failure(domain)
+        raise FetchError(url, last_reason, retryable=True)
+
+    def _before_request(self, domain: str, url: str) -> bytes | None:
+        """Corta si el circuito del dominio está abierto; devuelve la copia en caché si la hay."""
         if self.is_open(domain):
             self._count(domain, "failed")
             raise FetchError(url, "circuito abierto", retryable=False)
         cached = self._cached(domain, url)
         if cached is not None:
             self._count(domain, "ok")
-            return cached, "utf-8"
+        return cached
 
-        if self.source == "replay":
-            r = self.s["replay"]
-            target = f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}"
-            sem = self._semaphore(r["host"])
-        else:
-            target = url
-            sem = self._semaphore(domain)
+    def _route(self, domain: str, url: str) -> tuple[str, threading.BoundedSemaphore]:
+        """URL a pedir y semáforo a respetar: el sitio real o el servidor de replay."""
+        if self.source != "replay":
+            return url, self._semaphore(domain)
+        r = self.s["replay"]
+        return f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}", self._semaphore(r["host"])
 
-        last_reason = "?"
-        for attempt in range(self.max_retries + 1):
-            if attempt and self.is_open(domain):
-                break                       # otro hilo ya abrió el circuito: no seguir insistiendo
-            if attempt:
-                self._count(domain, "retried")
-                self._sleep_backoff(attempt)
-            try:
-                with sem:
-                    self._pace(domain)
-                    resp = self._session().get(target, cookies=cookies, timeout=self.timeout)
-            except requests.RequestException as exc:
-                last_reason = type(exc).__name__
-                continue
-            if resp.status_code == 200:
-                self._count(domain, "ok")
-                self._on_success(domain)
-                if self.capture:
-                    replay.save_capture(self.replay_dir, domain, url, resp.content)
-                return resp.content, _declared_encoding(resp)
-            last_reason = f"HTTP {resp.status_code}"
-            if resp.status_code not in RETRYABLE_STATUS:
-                # 403/404/412...: el sitio nos rechaza o no existe. No se insiste ni se intenta evadirlo.
-                self._count(domain, "failed")
-                if resp.status_code in BLOCK_STATUS:
-                    self._on_failure(domain)
-                else:
-                    self._on_success(domain)   # un 404 es una respuesta normal, no un bloqueo
-                raise FetchError(url, last_reason, retryable=False)
+    def _send(self, domain: str, target: str, sem, cookies) -> tuple[requests.Response | None, str]:
+        """Un intento. Devuelve (respuesta, motivo) o (None, nombre del error de red)."""
+        try:
+            with sem:
+                self._pace(domain)
+                resp = self._session().get(target, cookies=cookies, timeout=self.timeout)
+        except requests.RequestException as exc:
+            return None, type(exc).__name__
+        return resp, f"HTTP {resp.status_code}"
+
+    def _handle(self, domain: str, url: str, resp: requests.Response) -> tuple[bytes, str] | None:
+        """200: devuelve el contenido. Estado reintentable: None. Otro: falla sin reintentar."""
+        if resp.status_code == 200:
+            self._count(domain, "ok")
+            self._on_success(domain)
+            if self.capture:
+                replay.save_capture(self.replay_dir, domain, url, resp.content)
+            return resp.content, _declared_encoding(resp)
+        if resp.status_code in RETRYABLE_STATUS:
+            return None
+        # 403/404/412...: el sitio nos rechaza o no existe. No se insiste ni se intenta evadirlo.
         self._count(domain, "failed")
-        self._on_failure(domain)
-        raise FetchError(url, last_reason, retryable=True)
+        if resp.status_code in BLOCK_STATUS:
+            self._on_failure(domain)
+        else:
+            self._on_success(domain)       # un 404 es una respuesta normal, no un bloqueo
+        raise FetchError(url, f"HTTP {resp.status_code}", retryable=False)
 
     def snapshot_stats(self) -> dict:
         with self._stats_lock:
