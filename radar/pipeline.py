@@ -23,7 +23,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
-from . import db, scrapers
+from . import db, igdb, scrapers
 from .http_client import FetchError, HttpClient
 from .matching import MatchTask, match_game, set_catalog
 from .scrapers import xbox
@@ -143,6 +143,27 @@ class Pipeline:
         if "xbox" in self.s["sources"]:
             self.link_xbox()
         return count, results
+
+    def _igdb_durations(self, games: list[dict], col: Collected) -> None:
+        """Duración de respaldo (IGDB) para los juegos sin hltb_id. Sin credenciales, o si
+        IGDB falla, la corrida sigue sin esos datos."""
+        replaying = self.s["source"] == "replay"
+        creds = igdb.credentials()
+        if not creds and not replaying:
+            print("  [igdb] sin IGDB_CLIENT_ID / IGDB_CLIENT_SECRET: se omiten las duraciones de respaldo")
+            return
+        targets = {g["steam_appid"]: g["id"] for g in games if g.get("steam_appid") and not g.get("hltb_id")}
+        if not targets:
+            return
+        try:
+            found = igdb.Igdb(self.http, *(creds or ("", "")), replaying=replaying).durations(list(targets))
+        except (FetchError, ValueError, KeyError) as exc:
+            print(f"  [igdb] falló: {getattr(exc, 'reason', exc)}")
+            return
+        for appid, d in found.items():
+            col.durations.append((targets[appid], d))
+            col.ok.add((targets[appid], "igdb"))
+        print(f"  [igdb] duración para {len(found)} de {len(targets)} juegos sin ID de HLTB")
 
     def link_xbox(self) -> int:
         """Enlaza los juegos del catálogo con su página de Xbox Store usando los sitemaps
@@ -344,9 +365,9 @@ class Pipeline:
         c.executemany("INSERT INTO ratings (run_id, game_id, source, score, votes, platform, observed_at) "
                       "VALUES (?,?,?,?,?,?,?)",
                       [(run_id, gid, r.source, r.score, r.votes, r.platform, ts) for gid, r in col.ratings])
-        c.executemany("INSERT INTO durations (run_id, game_id, main_h, plus_h, comp_h, observed_at) "
-                      "VALUES (?,?,?,?,?,?)",
-                      [(run_id, gid, d.main_h, d.plus_h, d.comp_h, ts) for gid, d in col.durations])
+        c.executemany("INSERT INTO durations (run_id, game_id, main_h, plus_h, comp_h, observed_at, source) "
+                      "VALUES (?,?,?,?,?,?,?)",
+                      [(run_id, gid, d.main_h, d.plus_h, d.comp_h, ts, d.source) for gid, d in col.durations])
         c.executemany("""INSERT INTO source_status (game_id, source, last_ok, last_try, ok) VALUES (?,?,?,?,1)
                          ON CONFLICT(game_id, source) DO UPDATE SET last_ok=excluded.last_ok,
                          last_try=excluded.last_try, ok=1""", [(gid, src, ts, ts) for gid, src in col.ok])
@@ -383,6 +404,9 @@ class Pipeline:
             _, discovered = self.discover()
             st["discover"] = time.perf_counter() - t
 
+        applied = db.apply_manual_ids(self.conn, self.s.path("manual_ids"))
+        if applied:
+            print(f"  [ids] {applied} juegos con IDs cargados a mano")
         games = db.load_games(self.conn, limit)
         active = scrapers.build(self.s["sources"])
         jobs = [FetchJob(r, sc, None) for sc in active.values() for r in sc.batch_requests(games)]
@@ -404,6 +428,11 @@ class Pipeline:
 
         # Las páginas del descubrimiento solo aportan calificaciones (las ofertas salen del lote).
         col = self._collect(games, results + [ParseResult(r.request, ratings=r.ratings) for r in discovered])
+
+        if "igdb" in self.s["sources"]:
+            t = time.perf_counter()
+            self._igdb_durations(games, col)
+            st["igdb"] = time.perf_counter() - t
 
         t = time.perf_counter()
         matches = self._match(games, col.offers)

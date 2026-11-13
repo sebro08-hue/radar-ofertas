@@ -57,7 +57,7 @@ def build(conn, settings) -> Path:
     prices = _latest_prices(conn)
     hist_min = _min_history(conn)
     ratings = _latest_by(conn, "ratings", "source")
-    durations = _latest_by(conn, "durations", "run_id")
+    durations = _latest_by(conn, "durations", "source")    # la última de cada fuente
     status = {}
     for r in conn.execute("SELECT * FROM source_status"):
         status.setdefault(r["game_id"], []).append(dict(r))
@@ -87,10 +87,10 @@ def build(conn, settings) -> Path:
 
         history = [dict(r) for r in conn.execute(
             "SELECT store, price, observed_at FROM price_observations WHERE game_id=? ORDER BY observed_at", (gid,))]
-        dur = durations.get(gid, [])
+        dur = _preferred_duration(durations.get(gid, []))
         detail = {**card, "msrp": g["msrp"], "release_date": g["release_date"],
                   "alt_titles": json.loads(g["alt_titles"]), "offers": prices.get(gid, []),
-                  "ratings": ratings.get(gid, []), "duration": dur[-1] if dur else None,
+                  "ratings": ratings.get(gid, []), "duration": dur,
                   "history": history, "source_status": status.get(gid, [])}
         (data_dir / "games" / f"{gid}.json").write_text(json.dumps(detail, ensure_ascii=False), encoding="utf-8")
 
@@ -100,6 +100,12 @@ def build(conn, settings) -> Path:
 
     _metrics(conn, data_dir, last_run)
     return dist
+
+
+def _preferred_duration(rows: list[dict]) -> dict | None:
+    """How Long To Beat si está; si no, IGDB (respaldo)."""
+    by_source = {r["source"]: r for r in rows}
+    return by_source.get("hltb") or by_source.get("igdb")
 
 
 def _metrics(conn, data_dir: Path, last_run) -> None:

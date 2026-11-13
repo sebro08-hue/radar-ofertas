@@ -51,6 +51,7 @@ class Duration:
     main_h: float | None
     plus_h: float | None
     comp_h: float | None
+    source: str = "hltb"         # hltb | igdb (respaldo)
 
 
 @dataclass

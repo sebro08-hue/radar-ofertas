@@ -2,6 +2,8 @@
 # y se puede sobrescribir desde la línea de comandos (ver `python -m radar --help`).
 
 db_path: data/radar.db
+# Hoja de IDs cargados a mano (HLTB, Metacritic, Xbox). Se aplica al inicio de cada `run`.
+manual_ids: data/ids_manual.csv
 replay_dir: data/replay
 site_dir: site/dist
 
@@ -62,6 +64,7 @@ per_domain_limit:
 per_domain_interval_s:
   www.amazon.com: 4
   www.xbox.com: 1
+  api.igdb.com: 0.3       # límite de la API: 4 solicitudes por segundo
 
 # Rotación: fuentes que no se consultan para todo el catálogo en cada ejecución,
 # sino para los N juegos consultados hace más tiempo (o nunca). Con 100 juegos
@@ -83,4 +86,5 @@ matching:
   compare_against_catalog: true
 
 # Fuentes activas (ver radar/scrapers/__init__.py).
-sources: [steam, gog, xbox, amazon, metacritic, hltb]
+# igdb: duración de respaldo para juegos sin hltb_id (requiere IGDB_CLIENT_ID / IGDB_CLIENT_SECRET).
+sources: [steam, gog, xbox, amazon, metacritic, hltb, igdb]

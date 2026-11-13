@@ -14,6 +14,7 @@ import argparse
 import csv
 import json
 import sys
+from pathlib import Path
 
 from . import config, db
 
@@ -137,6 +138,11 @@ def cmd_games(a):
             n += 1
         conn.commit()
         print(n, "juegos importados")
+    elif a.action == "export-ids":
+        n = db.export_manual_ids(conn, Path(a.file), a.limit)
+        print(f"{n} juegos en {a.file}; llenen hltb_id (el número de howlongtobeat.com/game/<id>)")
+    elif a.action == "import-ids":
+        print(db.apply_manual_ids(conn, Path(a.file)), "juegos actualizados")
 
 
 SETTABLE = ["canonical_title", "release_date", "msrp", "hltb_id", "metacritic_slug", "image_url",
@@ -200,6 +206,11 @@ def main(argv=None):
     g.add_argument("id", type=int)
     g = gsub.add_parser("import")
     g.add_argument("file")
+    g = gsub.add_parser("export-ids", help="hoja CSV para cargar IDs de HLTB/Metacritic/Xbox a mano")
+    g.add_argument("file", nargs="?", default=str(config.ROOT / "data" / "ids_manual.csv"))
+    g.add_argument("--limit", type=int)
+    g = gsub.add_parser("import-ids", help="aplica la hoja de IDs (también se aplica sola en cada `run`)")
+    g.add_argument("file", nargs="?", default=str(config.ROOT / "data" / "ids_manual.csv"))
     p.set_defaults(fn=cmd_games)
 
     a = ap.parse_args(argv)
