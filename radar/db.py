@@ -6,10 +6,12 @@ entre hilos.
 """
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -65,7 +67,8 @@ CREATE TABLE IF NOT EXISTS durations (
     run_id      INTEGER NOT NULL,
     game_id     INTEGER NOT NULL REFERENCES games(id),
     main_h      REAL, plus_h REAL, comp_h REAL,
-    observed_at TEXT NOT NULL
+    observed_at TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'hltb'  -- hltb | igdb
 );
 
 -- Última vez que cada fuente dio datos de cada juego (para marcar datos desactualizados).
@@ -146,6 +149,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "xbox_url" not in cols:
         conn.execute("ALTER TABLE games ADD COLUMN xbox_url TEXT")
         conn.commit()
+    dcols = {r[1] for r in conn.execute("PRAGMA table_info(durations)")}
+    if "source" not in dcols:
+        conn.execute("ALTER TABLE durations ADD COLUMN source TEXT NOT NULL DEFAULT 'hltb'")
+        conn.commit()
 
 
 # ---------------------------------------------------------------- juegos
@@ -212,6 +219,58 @@ def retire_missing(conn: sqlite3.Connection, seen_appids: set[int]) -> int:
     gone = [a for a in active if a not in seen_appids]
     conn.executemany("UPDATE games SET active=0 WHERE steam_appid=?", [(a,) for a in gone])
     return len(gone)
+
+
+MANUAL_ID_FIELDS = ("hltb_id", "metacritic_slug", "xbox_url")
+
+
+def apply_manual_ids(conn: sqlite3.Connection, path: Path) -> int:
+    """Aplica la hoja de IDs cargados a mano (CSV con steam_appid y los campos de
+    MANUAL_ID_FIELDS). Las celdas vacías no tocan nada. Devuelve cuántos juegos cambió."""
+    if not path.is_file():
+        return 0
+    changed = 0
+    with open(path, encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            appid = (row.get("steam_appid") or "").strip()
+            fields = {k: row[k].strip() for k in MANUAL_ID_FIELDS if (row.get(k) or "").strip()}
+            if not appid.isdigit() or not fields:
+                continue
+            if "hltb_id" in fields:
+                if not fields["hltb_id"].isdigit():
+                    continue                      # celda mal escrita: mejor no aplicar nada de esa fila
+                fields["hltb_id"] = int(fields["hltb_id"])
+            game = conn.execute("SELECT id, hltb_id, metacritic_slug, xbox_url FROM games WHERE steam_appid=?",
+                                (int(appid),)).fetchone()
+            if not game:
+                continue
+            fields = {k: v for k, v in fields.items() if game[k] != v}   # solo lo que de verdad cambia
+            if fields:
+                update_game_fields(conn, game["id"], fields)
+                changed += 1
+    conn.commit()
+    return changed
+
+
+def export_manual_ids(conn: sqlite3.Connection, path: Path, limit: int | None = None) -> int:
+    """Escribe la hoja para cargar IDs a mano: juegos activos con steam_appid, primero los
+    que ya se publican en el sitio (precio en 2 tiendas o más). Conserva los hltb_id ya
+    cargados. Metacritic y Xbox van vacíos: el sistema los encuentra solo y esas columnas
+    son para corregirlo a mano cuando se equivoca."""
+    rows = conn.execute("""
+        SELECT g.steam_appid, g.canonical_title, g.hltb_id,
+               (SELECT COUNT(DISTINCT store) FROM price_observations p WHERE p.game_id = g.id) AS stores
+        FROM games g WHERE g.active = 1 AND g.steam_appid IS NOT NULL
+        ORDER BY stores DESC, g.id""").fetchall()
+    if limit:
+        rows = rows[:limit]
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["steam_appid", "canonical_title", *MANUAL_ID_FIELDS, "buscar_en_hltb"])
+        for r in rows:
+            w.writerow([r["steam_appid"], r["canonical_title"], r["hltb_id"] or "", "", "",
+                        f"https://howlongtobeat.com/?q={quote(r['canonical_title'])}"])
+    return len(rows)
 
 
 def last_tries(conn: sqlite3.Connection, source: str) -> dict[int, str]:

@@ -18,7 +18,9 @@ REGISTRY: dict[str, type[Scraper]] = {
 
 
 def build(names: list[str]) -> dict[str, Scraper]:
-    return {n: REGISTRY[n]() for n in names}
+    """Scrapers de las fuentes activas. Las fuentes que no son scrapers por página
+    (p. ej. "igdb", que consulta por lotes) las maneja el pipeline aparte."""
+    return {n: REGISTRY[n]() for n in names if n in REGISTRY}
 
 
 __all__ = ["REGISTRY", "build", "SteamDiscover", "Scraper", "Request", "Offer",

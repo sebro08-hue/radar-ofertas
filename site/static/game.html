@@ -34,7 +34,7 @@ fetch(`data/games/${encodeURIComponent(id)}.json`).then(r => r.json()).then(g =>
         <p><span class="price">${money(g.best_price)}</span> en ${esc(g.best_store)} ${g.historic_low ? '<span class="tag low">mínimo histórico</span>' : ""}</p>
         <p>MSRP: ${money(g.msrp)}</p>
         <p>Calificaciones: ${ratings}</p>
-        <p>How Long To Beat: ${d ? `historia ${d.main_h ?? "—"} h · +extras ${d.plus_h ?? "—"} h · completista ${d.comp_h ?? "—"} h` : "—"}</p>
+        <p>Duración${d ? ` (${d.source === "igdb" ? "IGDB" : "How Long To Beat"})` : ""}: ${d ? `historia ${d.main_h ?? "—"} h · +extras ${d.plus_h ?? "—"} h · completista ${d.comp_h ?? "—"} h` : "—"}</p>
         ${staleNote}
       </div>
     </div>

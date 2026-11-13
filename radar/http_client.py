@@ -16,6 +16,7 @@ import random
 import threading
 import time
 from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -40,6 +41,22 @@ def _decode(content: bytes, encoding: str) -> str:
         return content.decode(encoding, errors="replace")
     except LookupError:                     # charset desconocido
         return content.decode("utf-8", errors="replace")
+
+
+@dataclass(frozen=True)
+class _Call:
+    """Una solicitud. `key` identifica la respuesta en caché y en las capturas de replay:
+    la URL, más el método y el cuerpo cuando no es un GET simple."""
+    url: str
+    method: str = "GET"
+    data: str | None = None
+    headers: dict = field(default_factory=dict)
+    cookies: dict | None = None
+    store: bool = True                     # False: no guardar en caché ni capturas (secretos)
+
+    @property
+    def key(self) -> str:
+        return self.url if self.method == "GET" and self.data is None else f"{self.method} {self.url}\n{self.data or ''}"
 
 
 class FetchError(Exception):
@@ -158,20 +175,25 @@ class HttpClient:
 
     def get(self, url: str, cookies: dict | None = None) -> str:
         """Descarga y decodifica como texto."""
-        return _decode(*self._fetch(url, cookies))
+        return _decode(*self._fetch(_Call(url, cookies=cookies)))
 
     def get_bytes(self, url: str, cookies: dict | None = None) -> bytes:
         """Descarga sin decodificar (archivos comprimidos, imágenes...)."""
-        return self._fetch(url, cookies)[0]
+        return self._fetch(_Call(url, cookies=cookies))[0]
 
-    def _fetch(self, url: str, cookies: dict | None) -> tuple[bytes, str]:
+    def post(self, url: str, data: str, headers: dict | None = None, store: bool = True) -> str:
+        """POST con cuerpo de texto (APIs como IGDB). Con store=False la respuesta no se
+        guarda en caché ni en las capturas: para solicitudes que llevan secretos."""
+        return _decode(*self._fetch(_Call(url, "POST", data, headers or {}, store=store)))
+
+    def _fetch(self, call: _Call) -> tuple[bytes, str]:
         """Devuelve (contenido, codificación declarada). Reintenta con backoff los
         errores de red y los estados reintentables; el resto falla de inmediato."""
-        domain = urlsplit(url).hostname or "?"
-        cached = self._before_request(domain, url)
+        domain = urlsplit(call.url).hostname or "?"
+        cached = self._before_request(domain, call)
         if cached is not None:
             return cached, "utf-8"
-        target, sem = self._route(domain, url)
+        target, sem = self._route(domain, call)
 
         last_reason = "?"
         for attempt in range(self.max_retries + 1):
@@ -180,51 +202,59 @@ class HttpClient:
                     break                   # otro hilo ya abrió el circuito: no seguir insistiendo
                 self._count(domain, "retried")
                 self._sleep_backoff(attempt)
-            resp, last_reason = self._send(domain, target, sem, cookies)
-            result = self._handle(domain, url, resp) if resp is not None else None
+            resp, last_reason = self._send(domain, target, sem, call)
+            result = self._handle(domain, call, resp) if resp is not None else None
             if result is not None:
                 return result
         self._count(domain, "failed")
         self._on_failure(domain)
-        raise FetchError(url, last_reason, retryable=True)
+        raise FetchError(call.url, last_reason, retryable=True)
 
-    def _before_request(self, domain: str, url: str) -> bytes | None:
+    def _before_request(self, domain: str, call: _Call) -> bytes | None:
         """Corta si el circuito del dominio está abierto; devuelve la copia en caché si la hay."""
         if self.is_open(domain):
             self._count(domain, "failed")
-            raise FetchError(url, "circuito abierto", retryable=False)
-        cached = self._cached(domain, url)
+            raise FetchError(call.url, "circuito abierto", retryable=False)
+        if self.source == "replay" and not call.store:
+            raise FetchError(call.url, "no disponible en replay", retryable=False)
+        cached = self._cached(domain, call.key) if call.store else None
         if cached is not None:
             self._count(domain, "ok")
         return cached
 
-    def _route(self, domain: str, url: str) -> tuple[str, threading.BoundedSemaphore]:
+    def _route(self, domain: str, call: _Call) -> tuple[str, threading.BoundedSemaphore]:
         """URL a pedir y semáforo a respetar: el sitio real o el servidor de replay."""
         if self.source != "replay":
-            return url, self._semaphore(domain)
+            return call.url, self._semaphore(domain)
         r = self.s["replay"]
         # El servidor de replay solo escucha en la propia máquina (se valida en __init__),
         # así que este tráfico nunca sale a la red y HTTPS no aportaría nada.
-        target = f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}"  # NOSONAR
+        target = f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(call.key)}"  # NOSONAR
         return target, self._semaphore(r["host"])
 
-    def _send(self, domain: str, target: str, sem, cookies) -> tuple[requests.Response | None, str]:
-        """Un intento. Devuelve (respuesta, motivo) o (None, nombre del error de red)."""
+    def _send(self, domain: str, target: str, sem, call: _Call) -> tuple[requests.Response | None, str]:
+        """Un intento. Devuelve (respuesta, motivo) o (None, nombre del error de red).
+        En replay siempre es GET: la clave de la captura ya identifica método y cuerpo."""
+        replaying = self.source == "replay"
         try:
             with sem:
                 self._pace(domain)
-                resp = self._session().get(target, cookies=cookies, timeout=self.timeout)
+                resp = self._session().request(
+                    "GET" if replaying else call.method, target, cookies=call.cookies,
+                    data=None if replaying else call.data, headers=None if replaying else call.headers,
+                    timeout=self.timeout)
         except requests.RequestException as exc:
             return None, type(exc).__name__
         return resp, f"HTTP {resp.status_code}"
 
-    def _handle(self, domain: str, url: str, resp: requests.Response) -> tuple[bytes, str] | None:
+    def _handle(self, domain: str, call: _Call, resp: requests.Response) -> tuple[bytes, str] | None:
         """200: devuelve el contenido. Estado reintentable: None. Otro: falla sin reintentar."""
+        url = call.url
         if resp.status_code == 200:
             self._count(domain, "ok")
             self._on_success(domain)
-            if self.capture:
-                replay.save_capture(self.replay_dir, domain, url, resp.content)
+            if self.capture and call.store:
+                replay.save_capture(self.replay_dir, domain, call.key, resp.content)
             return resp.content, _declared_encoding(resp)
         if resp.status_code in RETRYABLE_STATUS:
             return None
