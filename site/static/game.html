@@ -15,6 +15,11 @@
 <main id="main"><p>Cargando…</p></main>
 <script src="app.js"></script>
 <script>
+function durationText(d) {
+  if (!d) return "Duración: —";
+  const source = d.source === "igdb" ? "IGDB" : "How Long To Beat";
+  return `Duración (${source}): historia ${d.main_h ?? "—"} h · +extras ${d.plus_h ?? "—"} h · completista ${d.comp_h ?? "—"} h`;
+}
 const id = new URLSearchParams(location.search).get("id");
 fetch(`data/games/${encodeURIComponent(id)}.json`).then(r => r.json()).then(g => {
   document.title = g.title;
@@ -23,7 +28,6 @@ fetch(`data/games/${encodeURIComponent(id)}.json`).then(r => r.json()).then(g =>
     <td>${money(o.price, o.currency)}</td><td>${o.regular ? money(o.regular, o.currency) : "—"}</td>
     <td>${esc(o.format)}</td><td>${esc(o.platform ?? "")}</td><td>${fmtDate(o.observed_at)}</td></tr>`).join("");
   const ratings = g.ratings.map(r => `${esc(r.source)}: <b>${r.score}</b>`).join(" · ") || "—";
-  const d = g.duration;
   const staleNote = stale.size ? `<p class="tag stale">Fuentes sin actualizar: ${[...stale].map(([s, t]) => `${esc(s)} (último dato: ${t ? fmtDate(t) : "nunca"})`).join(", ")}</p>` : "";
   document.getElementById("main").innerHTML = `
     <div class="detail">
@@ -34,7 +38,7 @@ fetch(`data/games/${encodeURIComponent(id)}.json`).then(r => r.json()).then(g =>
         <p><span class="price">${money(g.best_price)}</span> en ${esc(g.best_store)} ${g.historic_low ? '<span class="tag low">mínimo histórico</span>' : ""}</p>
         <p>MSRP: ${money(g.msrp)}</p>
         <p>Calificaciones: ${ratings}</p>
-        <p>Duración${d ? ` (${d.source === "igdb" ? "IGDB" : "How Long To Beat"})` : ""}: ${d ? `historia ${d.main_h ?? "—"} h · +extras ${d.plus_h ?? "—"} h · completista ${d.comp_h ?? "—"} h` : "—"}</p>
+        <p>${durationText(g.duration)}</p>
         ${staleNote}
       </div>
     </div>

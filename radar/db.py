@@ -224,6 +224,20 @@ def retire_missing(conn: sqlite3.Connection, seen_appids: set[int]) -> int:
 MANUAL_ID_FIELDS = ("hltb_id", "metacritic_slug", "xbox_url")
 
 
+def _manual_row(row: dict) -> tuple[int, dict] | None:
+    """(steam_appid, campos) de una fila de la hoja, o None si no hay nada que aplicar
+    o la fila está mal escrita (en ese caso es mejor no aplicar nada de ella)."""
+    appid = (row.get("steam_appid") or "").strip()
+    fields = {k: row[k].strip() for k in MANUAL_ID_FIELDS if (row.get(k) or "").strip()}
+    if not appid.isdigit() or not fields:
+        return None
+    if "hltb_id" in fields:
+        if not fields["hltb_id"].isdigit():
+            return None
+        fields["hltb_id"] = int(fields["hltb_id"])
+    return int(appid), fields
+
+
 def apply_manual_ids(conn: sqlite3.Connection, path: Path) -> int:
     """Aplica la hoja de IDs cargados a mano (CSV con steam_appid y los campos de
     MANUAL_ID_FIELDS). Las celdas vacías no tocan nada. Devuelve cuántos juegos cambió."""
@@ -232,19 +246,13 @@ def apply_manual_ids(conn: sqlite3.Connection, path: Path) -> int:
     changed = 0
     with open(path, encoding="utf-8", newline="") as fh:
         for row in csv.DictReader(fh):
-            appid = (row.get("steam_appid") or "").strip()
-            fields = {k: row[k].strip() for k in MANUAL_ID_FIELDS if (row.get(k) or "").strip()}
-            if not appid.isdigit() or not fields:
+            parsed = _manual_row(row)
+            if not parsed:
                 continue
-            if "hltb_id" in fields:
-                if not fields["hltb_id"].isdigit():
-                    continue                      # celda mal escrita: mejor no aplicar nada de esa fila
-                fields["hltb_id"] = int(fields["hltb_id"])
+            appid, fields = parsed
             game = conn.execute("SELECT id, hltb_id, metacritic_slug, xbox_url FROM games WHERE steam_appid=?",
-                                (int(appid),)).fetchone()
-            if not game:
-                continue
-            fields = {k: v for k, v in fields.items() if game[k] != v}   # solo lo que de verdad cambia
+                                (appid,)).fetchone()
+            fields = {k: v for k, v in fields.items() if game and game[k] != v}   # solo lo que cambia
             if fields:
                 update_game_fields(conn, game["id"], fields)
                 changed += 1
