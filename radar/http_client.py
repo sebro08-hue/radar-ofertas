@@ -54,6 +54,9 @@ class HttpClient:
     def __init__(self, settings):
         self.s = settings
         self.source = settings["source"]
+        if self.source == "replay" and not replay.is_loopback(settings["replay"]["host"]):
+            raise ValueError("el servidor de replay debe escuchar en la propia máquina "
+                             f"(127.0.0.1, ::1 o localhost), no en {settings['replay']['host']!r}")
         self.replay_dir: Path = settings.path("replay_dir")
         self.capture = bool(settings["capture"]) and self.source == "live"
         self.cache_ttl_s = float(settings["cache_ttl_hours"]) * 3600
@@ -200,7 +203,10 @@ class HttpClient:
         if self.source != "replay":
             return url, self._semaphore(domain)
         r = self.s["replay"]
-        return f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}", self._semaphore(r["host"])
+        # El servidor de replay solo escucha en la propia máquina (se valida en __init__),
+        # así que este tráfico nunca sale a la red y HTTPS no aportaría nada.
+        target = f"http://{r['host']}:{r['port']}/r/{domain}/{replay.key_for(url)}"  # NOSONAR
+        return target, self._semaphore(r["host"])
 
     def _send(self, domain: str, target: str, sem, cookies) -> tuple[requests.Response | None, str]:
         """Un intento. Devuelve (respuesta, motivo) o (None, nombre del error de red)."""
