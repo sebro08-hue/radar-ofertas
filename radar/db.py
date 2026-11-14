@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -222,6 +223,18 @@ def retire_missing(conn: sqlite3.Connection, seen_appids: set[int]) -> int:
 
 
 MANUAL_ID_FIELDS = ("hltb_id", "metacritic_slug", "xbox_url")
+# Juegos marcados como prioridad en la hoja: los más visibles del sitio.
+MANUAL_PRIORITY = 50
+_HLTB_URL = re.compile(r"howlongtobeat\.com/game/(\d+)")
+
+
+def parse_hltb_id(value: str) -> int | None:
+    """Acepta el número (12345) o la dirección completa (https://howlongtobeat.com/game/12345)."""
+    value = value.strip()
+    if value.isdigit():
+        return int(value)
+    m = _HLTB_URL.search(value)
+    return int(m.group(1)) if m else None
 
 
 def _manual_row(row: dict) -> tuple[int, dict] | None:
@@ -232,9 +245,9 @@ def _manual_row(row: dict) -> tuple[int, dict] | None:
     if not appid.isdigit() or not fields:
         return None
     if "hltb_id" in fields:
-        if not fields["hltb_id"].isdigit():
+        fields["hltb_id"] = parse_hltb_id(fields["hltb_id"])
+        if fields["hltb_id"] is None:
             return None
-        fields["hltb_id"] = int(fields["hltb_id"])
     return int(appid), fields
 
 
@@ -262,7 +275,8 @@ def apply_manual_ids(conn: sqlite3.Connection, path: Path) -> int:
 
 def export_manual_ids(conn: sqlite3.Connection, path: Path, limit: int | None = None) -> int:
     """Escribe la hoja para cargar IDs a mano: juegos activos con steam_appid, primero los
-    que ya se publican en el sitio (precio en 2 tiendas o más). Conserva los hltb_id ya
+    que ya se publican en el sitio (precio en 2 tiendas o más); los primeros MANUAL_PRIORITY
+    van marcados en la columna `prioridad`. Conserva los hltb_id ya
     cargados. Metacritic y Xbox van vacíos: el sistema los encuentra solo y esas columnas
     son para corregirlo a mano cuando se equivoca."""
     rows = conn.execute("""
@@ -274,9 +288,10 @@ def export_manual_ids(conn: sqlite3.Connection, path: Path, limit: int | None = 
         rows = rows[:limit]
     with open(path, "w", encoding="utf-8", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(["steam_appid", "canonical_title", *MANUAL_ID_FIELDS, "buscar_en_hltb"])
-        for r in rows:
-            w.writerow([r["steam_appid"], r["canonical_title"], r["hltb_id"] or "", "", "",
+        w.writerow(["prioridad", "steam_appid", "canonical_title", *MANUAL_ID_FIELDS, "buscar_en_hltb"])
+        for i, r in enumerate(rows):
+            w.writerow(["sí" if i < MANUAL_PRIORITY else "", r["steam_appid"], r["canonical_title"],
+                        r["hltb_id"] or "", "", "",
                         f"https://howlongtobeat.com/?q={quote(r['canonical_title'])}"])
     return len(rows)
 

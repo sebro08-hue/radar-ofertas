@@ -140,7 +140,7 @@ def cmd_games(a):
         print(n, "juegos importados")
     elif a.action == "export-ids":
         n = db.export_manual_ids(conn, Path(a.file), a.limit)
-        print(f"{n} juegos en {a.file}; llenen hltb_id (el número de howlongtobeat.com/game/<id>)")
+        print(f"{n} juegos en {a.file}; peguen en hltb_id la dirección howlongtobeat.com/game/<id> o el número")
     elif a.action == "import-ids":
         print(db.apply_manual_ids(conn, Path(a.file)), "juegos actualizados")
 
