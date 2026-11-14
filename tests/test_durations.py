@@ -92,6 +92,27 @@ class ManualIdsTest(unittest.TestCase):
         got = dict(self.conn.execute("SELECT canonical_title, hltb_id FROM games").fetchall())
         self.assertEqual(got, {"Elden Ring": 68151, "Hades": None})
 
+    def test_full_hltb_url_is_accepted(self):
+        for value, want in [("68151", 68151), (" https://howlongtobeat.com/game/68151 ", 68151),
+                            ("howlongtobeat.com/game/68151?tab=times", 68151),
+                            ("https://howlongtobeat.com/?q=Elden", None), ("", None), ("abc", None)]:
+            self.assertEqual(db.parse_hltb_id(value), want, value)
+
+    def test_apply_sheet_with_urls_and_priority(self):
+        path = self.dir / "ids.csv"
+        db.export_manual_ids(self.conn, path)
+        rows = list(csv.DictReader(open(path, encoding="utf-8")))
+        self.assertEqual({r["prioridad"] for r in rows}, {"sí"})          # 2 juegos < 50: todos prioridad
+        rows[0]["hltb_id"] = "https://howlongtobeat.com/game/4242"
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+            w.writeheader()
+            w.writerows(rows)
+        self.assertEqual(db.apply_manual_ids(self.conn, path), 1)
+        got = self.conn.execute("SELECT hltb_id FROM games WHERE steam_appid=?",
+                                (int(rows[0]["steam_appid"]),)).fetchone()[0]
+        self.assertEqual(got, 4242)
+
     def test_missing_sheet_is_fine(self):
         self.assertEqual(db.apply_manual_ids(self.conn, self.dir / "no-existe.csv"), 0)
 

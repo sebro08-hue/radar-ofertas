@@ -116,7 +116,7 @@ Los sitios más sensibles se consultan con una pausa mínima entre solicitudes (
 
 How Long To Beat no ofrece una forma permitida de encontrar juegos de manera automática: su `robots.txt` prohíbe `/api`, que es su búsqueda, y no publica sitemap. Por eso:
 
-1. **IDs de HLTB a mano:** `data/ids_manual.csv` trae los juegos del catálogo, con los publicados primero, y un enlace de búsqueda por cada uno. Se busca el juego, se copia el número de `howlongtobeat.com/game/<id>` en la columna `hltb_id` y se sube el cambio por PR. Cada corrida aplica la hoja sola. Las columnas `metacritic_slug` y `xbox_url` sirven para corregir a mano un enlace que el sistema encontró mal.
+1. **IDs de HLTB a mano:** `data/ids_manual.csv` trae los juegos del catálogo, con los publicados primero, y un enlace de búsqueda por cada uno. Se busca el juego y se pega en la columna `hltb_id` la dirección de su página (`https://howlongtobeat.com/game/<id>`) o solo el número; después se sube el cambio por PR. La columna `prioridad` marca los 50 juegos más visibles del sitio, por donde conviene empezar. Cada corrida aplica la hoja sola. Las columnas `metacritic_slug` y `xbox_url` sirven para corregir a mano un enlace que el sistema encontró mal.
 2. **IGDB de respaldo:** para los juegos sin `hltb_id`, la duración sale de la API de IGDB por id de Steam. Necesita credenciales de Twitch como secretos del repositorio: `IGDB_CLIENT_ID` e `IGDB_CLIENT_SECRET`. Sin ellas, esta fuente se omite.
 
 El sitio muestra HLTB cuando existe e indica la fuente de cada duración.
