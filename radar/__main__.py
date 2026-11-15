@@ -91,7 +91,8 @@ def cmd_validate(a):
     from .matching import normalize, score
     s = _settings(a)
     pairs = list(csv.DictReader(open(a.file, encoding="utf-8")))
-    print(f"{len(pairs)} pares")
+    reviewed = sum((p.get("revisado") or "").strip().lower() in ("sí", "si", "1") for p in pairs)
+    print(f"{len(pairs)} pares ({reviewed} revisados a mano; columna `revisado`)")
     print(f"{'umbral':>7} {'precisión':>10} {'exhaust.':>9}  tp  fp  fn")
     for th in [x / 100 for x in range(70, 100, 2)] if a.sweep else [s["matching"]["threshold"]]:
         tp = fp = fn = 0

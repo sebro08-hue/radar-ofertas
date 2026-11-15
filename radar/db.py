@@ -150,6 +150,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "xbox_url" not in cols:
         conn.execute("ALTER TABLE games ADD COLUMN xbox_url TEXT")
         conn.commit()
+    if "hard_reason" not in cols:
+        # Motivo de los casos difíciles marcados automáticamente (NULL = marcado a mano).
+        conn.execute("ALTER TABLE games ADD COLUMN hard_reason TEXT")
+        conn.commit()
     dcols = {r[1] for r in conn.execute("PRAGMA table_info(durations)")}
     if "source" not in dcols:
         conn.execute("ALTER TABLE durations ADD COLUMN source TEXT NOT NULL DEFAULT 'hltb'")
@@ -220,6 +224,21 @@ def retire_missing(conn: sqlite3.Connection, seen_appids: set[int]) -> int:
     gone = [a for a in active if a not in seen_appids]
     conn.executemany("UPDATE games SET active=0 WHERE steam_appid=?", [(a,) for a in gone])
     return len(gone)
+
+
+def mark_hard_cases(conn: sqlite3.Connection) -> int:
+    """Marca los casos difíciles del catálogo activo con su motivo (ver
+    matching/hard_cases.py). Los marcados a mano (hard_reason NULL) no se tocan;
+    los automáticos que dejan de cumplir se desmarcan. Devuelve el total marcado."""
+    from .matching.hard_cases import hard_reasons
+    games = conn.execute("SELECT id, canonical_title FROM games WHERE active=1").fetchall()
+    reasons = hard_reasons([g["canonical_title"] for g in games])
+    conn.execute("UPDATE games SET hard_case=0, hard_reason=NULL WHERE hard_reason IS NOT NULL")
+    conn.executemany("UPDATE games SET hard_case=1, hard_reason=? WHERE id=?",
+                     [("; ".join(reasons[g["canonical_title"]]), g["id"])
+                      for g in games if g["canonical_title"] in reasons])
+    conn.commit()
+    return conn.execute("SELECT COUNT(*) FROM games WHERE active=1 AND hard_case=1").fetchone()[0]
 
 
 MANUAL_ID_FIELDS = ("hltb_id", "metacritic_slug", "xbox_url")
