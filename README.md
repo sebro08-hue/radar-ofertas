@@ -83,12 +83,20 @@ Para una captura completa (todas las fuentes, todo el catálogo, sin rotación) 
 
 ### Benchmarks
 
+Se miden en modo replay, sobre una captura completa: descargar el artefacto del workflow **capturar-replay** y descomprimirlo en `data/` (quedan `data/replay/` y `data/bench.db`).
+
 ```bash
-python bench/run_sweeps.py          # barrido de workers: speedup, eficiencia, Karp–Flatt
-python bench/contention.py          # estrategias de agregación entre hilos
+python bench/run_sweeps.py          # barridos de workers y de latencia: speedup, eficiencia, Karp–Flatt, Amdahl
+python bench/contention.py          # estrategias de agregación entre hilos (lock, estado local, cola) y la condición de carrera
 ```
 
-Los resultados quedan en `bench/results/`. El último resumen aparece en la página de métricas del sitio.
+`run_sweeps.py` mide cada etapa y el pipeline completo en los tres modos, con 5 repeticiones por configuración (mediana, mínimo, máximo y desviación). Cada ejecución parte de una copia nueva de `data/bench.db`, así que todas comparan exactamente el mismo trabajo. Barre:
+
+- workers de E/S: 1, 2, 4, 8, 16, 32 y 64 (modo `concurrent`);
+- workers de emparejamiento: 1, 2, 4… hasta los núcleos lógicos y el doble, con `ProcessPoolExecutor` y con `ThreadPoolExecutor` (modo `parallel`);
+- latencia simulada: 0, 50, 150 y 300 ms, y 150 ± 50 ms.
+
+Las filas crudas y el resumen quedan en `bench/results/`. Los resúmenes `data/bench.json` y `data/contention.json` se publican en la página de métricas del sitio.
 
 ### Calidad del emparejamiento
 

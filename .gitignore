@@ -11,3 +11,5 @@ data/*.db-shm
 
 # Sitio generado (lo construye el pipeline o GitHub Actions).
 site/dist/
+
+data/bench-run.db
