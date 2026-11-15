@@ -79,7 +79,7 @@ discover:
   page_size: 50
 
 matching:
-  threshold: 0.82            # elegido con `python -m radar validate-matching --sweep`
+  threshold: 0.84            # elegido con `python -m radar validate-matching --sweep` (precisión 1.0)
   doubtful_margin: 0.10      # |score - threshold| < margen  => dudoso
   # Agrega todo el catálogo como candidatos "distractores" para que el
   # emparejamiento tenga carga de CPU medible.

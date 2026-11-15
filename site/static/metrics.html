@@ -21,6 +21,8 @@
   <div class="table-wrap"><table id="requests"></table></div>
   <h3>Juegos sin emparejar o con emparejamiento dudoso</h3>
   <div class="table-wrap"><table id="flags"></table></div>
+  <h3 id="hard-title">Casos difíciles del catálogo</h3>
+  <div class="table-wrap"><table id="hard"><thead><tr><th>Juego</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
   <h3>Cola de fallidos</h3>
   <div class="table-wrap"><table id="failures"></table></div>
   <h2>Speedup (modo replay)</h2>
@@ -41,6 +43,9 @@ fetch("data/metrics.json").then(r => r.json()).then(m => {
   table($("stages"), ["Etapa", "Segundos"], Object.entries(st).map(([k, v]) => [k, v.toFixed(3)]));
   table($("requests"), ["Dominio", "Exitosas", "Reintentadas", "Fallidas"], m.requests.map(r => [r.domain, r.ok, r.retried, r.failed]));
   table($("flags"), ["Juego", "Tienda", "Candidato", "Puntaje", "Motivo"], m.flags.map(f => [f.game, f.store, f.candidate, f.score, f.reason]));
+  const hard = m.hard_cases || [];
+  $("hard-title").textContent = `Casos difíciles del catálogo (${hard.length})`;
+  table($("hard"), ["Juego", "Motivo"], hard.map(h => [h.game, h.reason ?? "marcado a mano"]));
   table($("failures"), ["Fuente", "URL", "Error", "Recuperada"], m.failures.map(f => [f.source, f.url, f.error, f.recovered ? "sí" : "no"]));
 });
 
