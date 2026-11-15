@@ -29,6 +29,8 @@ def _settings(a) -> config.Settings:
         "replay.latency_ms": getattr(a, "latency_ms", None),
         "replay.jitter_ms": getattr(a, "jitter_ms", None),
         "db_path": getattr(a, "db", None),
+        # {} desactiva la rotación: cada fuente se consulta para todo el catálogo.
+        "rotation": {} if getattr(a, "no_rotation", False) else None,
     })
 
 
@@ -174,6 +176,8 @@ def main(argv=None):
     p.add_argument("--discover", action="store_true", help="incluir la etapa 0")
     p.add_argument("--start-replay", action="store_true", help="levantar el servidor replay dentro del proceso")
     p.add_argument("--no-publish", action="store_true")
+    p.add_argument("--no-rotation", action="store_true",
+                   help="consultar todas las fuentes para todo el catálogo (captura completa para replay)")
     p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("replay-server")

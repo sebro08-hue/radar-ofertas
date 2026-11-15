@@ -79,6 +79,8 @@ En modo `live`, cada respuesta se guarda en `data/replay/`. El modo `replay` sir
 python -m radar run --source replay --start-replay --latency-ms 150 --jitter-ms 50
 ```
 
+Para una captura completa (todas las fuentes, todo el catálogo, sin rotación) está el workflow manual **capturar-replay** en GitHub Actions. Deja como artefacto `replay/` y `bench.db`, la base con el mismo catálogo que se capturó. En local, lo mismo se hace con `python -m radar run --source live --discover --no-rotation --no-publish`.
+
 ### Benchmarks
 
 ```bash

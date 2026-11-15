@@ -1,0 +1,46 @@
+# Captura completa para el modo replay: consulta todas las fuentes para todo el
+# catálogo (sin rotación) y guarda cada respuesta. No publica el sitio ni toca el
+# historial del repo. El resultado queda como artefacto descargable:
+#   replay/       respuestas capturadas, una por solicitud
+#   bench.db      la base tal como quedó, para que los barridos usen el mismo catálogo
+name: capturar-replay
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actualizar-sitio        # nunca a la vez que la actualización diaria
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      - name: Pipeline completo con captura
+        env:
+          IGDB_CLIENT_ID: ${{ secrets.IGDB_CLIENT_ID }}
+          IGDB_CLIENT_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
+        run: python -m radar run --source live --mode parallel --discover --no-rotation --no-publish
+
+      - name: Empaquetar
+        run: |
+          mkdir -p capture
+          mv data/replay capture/replay
+          cp data/radar.db capture/bench.db
+          du -sh capture/replay/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-capture
+          path: capture
+          retention-days: 90
