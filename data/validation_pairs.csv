@@ -1,20 +1,90 @@
-a,b,same,note
-The Legend of Zelda: Breath of the Wild,Zelda: Breath of the Wild - Nintendo Switch,1,sufijo de plataforma
-The Witcher 3: Wild Hunt,The Witcher 3: Wild Hunt - Game of the Year Edition,1,edición GOTY
-The Witcher 3: Wild Hunt,The Witcher 2: Assassins of Kings,0,secuela
-Final Fantasy VII Remake,FINAL FANTASY VII REMAKE INTERGRADE,1,edición
-Final Fantasy VII Remake,Final Fantasy VII,0,remake vs original
-Dark Souls III,DARK SOULS™ III - Deluxe Edition,1,números romanos + edición
-Dark Souls III,Dark Souls II: Scholar of the First Sin,0,secuela con romano
-Resident Evil 4,Resident Evil 4 (PS5),1,plataforma entre paréntesis
-Resident Evil 4,Resident Evil 4 - Separate Ways,0,DLC
-Elden Ring,ELDEN RING NIGHTREIGN,0,spin-off
-Elden Ring,ELDEN RING Shadow of the Erdtree,0,expansión
-Red Dead Redemption 2,Red Dead Redemption,0,secuela
-Grand Theft Auto V,Grand Theft Auto V: Premium Edition,1,edición
-Grand Theft Auto V,Grand Theft Auto IV: The Complete Edition,0,secuela
-Marvel's Spider-Man Remastered,Marvel’s Spider-Man Remastered,1,apóstrofe tipográfico
-Baldur's Gate 3,Baldurs Gate III,1,apóstrofe + romano
-Hollow Knight,Hollow Knight: Silksong,0,secuela con subtítulo
-Persona 5 Royal,Persona 5 Royal (Xbox Series X|S),1,plataforma
-Persona 5 Royal,Persona 4 Golden,0,número distinto
+a,b,same,note,revisado
+The Legend of Zelda: Breath of the Wild,Zelda: Breath of the Wild - Nintendo Switch,1,sufijo de plataforma,
+The Witcher 3: Wild Hunt,The Witcher 3: Wild Hunt - Game of the Year Edition,1,edición GOTY,
+The Witcher 3: Wild Hunt,The Witcher 2: Assassins of Kings,0,secuela,
+Final Fantasy VII Remake,FINAL FANTASY VII REMAKE INTERGRADE,1,edición,
+Final Fantasy VII Remake,Final Fantasy VII,0,remake vs original,
+Dark Souls III,DARK SOULS™ III - Deluxe Edition,1,números romanos + edición,
+Dark Souls III,Dark Souls II: Scholar of the First Sin,0,secuela con romano,
+Resident Evil 4,Resident Evil 4 (PS5),1,plataforma entre paréntesis,
+Resident Evil 4,Resident Evil 4 - Separate Ways,0,DLC,
+Elden Ring,ELDEN RING NIGHTREIGN,0,spin-off,
+Elden Ring,ELDEN RING Shadow of the Erdtree,0,expansión,
+Red Dead Redemption 2,Red Dead Redemption,0,secuela,
+Grand Theft Auto V,Grand Theft Auto V: Premium Edition,1,edición,
+Grand Theft Auto V,Grand Theft Auto IV: The Complete Edition,0,secuela,
+Marvel's Spider-Man Remastered,Marvel’s Spider-Man Remastered,1,apóstrofe tipográfico,
+Baldur's Gate 3,Baldurs Gate III,1,apóstrofe + romano,
+Hollow Knight,Hollow Knight: Silksong,0,secuela con subtítulo,
+Persona 5 Royal,Persona 5 Royal (Xbox Series X|S),1,plataforma,
+Persona 5 Royal,Persona 4 Golden,0,número distinto,
+Cyberpunk 2077,Cyberpunk 2077: Ultimate Edition,1,edición Ultimate,
+Cairn,Cairn - Deluxe Edition,1,edición Deluxe,
+Grim Dawn,Grim Dawn Definitive Edition,1,edición Definitive,
+Frostpunk,Frostpunk: Game of the Year Edition,1,edición GOTY,
+Fallout 3: Game of the Year Edition,Fallout 3,1,edición GOTY en el canónico,
+CONTROL Ultimate Edition,Control,1,edición en el canónico + mayúsculas,
+Kerbal Space Program,Kerbal Space Program Enhanced Edition,1,edición Enhanced,
+Batman™: Arkham Knight,Batman™: Arkham Knight Premium Edition,1,marca ™ + edición,
+Kingdom Come: Deliverance II,Kingdom Come: Deliverance II Royal Edition,1,romano + edición,
+FINAL FANTASY XIV Online,FINAL FANTASY XIV Online - Complete Edition,1,romano + edición,
+Sid Meier's Civilization® V,Sid Meier's Civilization V: The Complete Edition - PC,1,marca ® + romano + edición,
+Darkest Dungeon®,Darkest Dungeon®: The Collector's Edition,1,marca ® + edición coleccionista,
+Ghost of Tsushima DIRECTOR'S CUT,Ghost Of Tsushima: Directors Cut for PlayStation 5 [PS5] (PS5),1,Director's Cut + apóstrofe + plataforma,
+"Warhammer 40,000: Rogue Trader","Warhammer 40,000: Rogue Trader Voidfarer Edition",1,coma en número + edición,
+S.T.A.L.K.E.R. 2: Heart of Chornobyl,S.T.A.L.K.E.R. 2: Heart of Chornobyl - Deluxe Edition,1,puntos en el título + edición,
+Fallout: New Vegas,Fallout New Vegas: Ultimate Edition (Playstation 3 All BONUS Content) NEW,1,sin dos puntos + edición + ruido,
+"Warhammer 40,000: Dawn of War - Definitive Edition","Warhammer 40,000: Dawn of War - Anniversary Edition",1,dos ediciones distintas del mismo juego,
+Black Myth: Wukong,Black Myth Wukong - For PS5,1,sin dos puntos + plataforma,
+Hollow Knight,Hollow Knight - For Nintendo Switch,1,plataforma,
+Sniper Elite 5,Sniper Elite 5 (Xbox Series X/Xbox One),1,plataforma entre paréntesis,
+Fallout 4,Fallout 4 - Xbox One (Renewed),1,plataforma + reacondicionado,
+FOR HONOR™,For Honor - PlayStation 4,1,marca ™ + mayúsculas + plataforma,
+STAR WARS™ Battlefront™ II,Star Wars Battlefront II - PlayStation 4,1,marcas ™ + romano + plataforma,
+Hunting Simulator 3,Hunting Simulator 3 - XSX,1,abreviatura de plataforma,
+Call of Duty®: Black Ops 7,Call of Duty: Black Ops 7 | Standard Edition | XBOX and Windows Digital Code,1,marca ® + edición + formato,
+Forza Horizon 5,"Forza Horizon 5 – Standard Edition – Xbox Series X, Xbox One",1,guion largo + edición + plataforma,
+DRAGON QUEST MONSTERS: The Dark Prince,DRAGON QUEST MONSTERS: The Dark Prince - Standard - Nintendo Switch [Digital Code],1,plataforma + formato,
+Golf With Your Friends,Golf With Friends (Code In Box) - Nintendo Switch,1,falta una palabra + formato,
+Horizon Forbidden West™ Complete Edition,Horizon Forbidden West - For PlayStation 5,1,edición en el canónico + plataforma,
+Call of Duty®: Infinite Warfare,Call of Duty: Infinite Warfare - PS4 Legacy Edition,1,marca ® + edición + plataforma,
+HELLDIVERS™ 2,Helldivers II,1,arábigo vs romano,
+Plants vs. Zombies™ Garden Warfare 2: Deluxe Edition,Plants vs. Zombies: Garden Warfare Volume 2,1,número con palabra Volume,
+Graveyard Keeper,Graveyard Keeper Artbook,0,artbook (extra),
+Diplomacy is Not an Option,Diplomacy is Not an Option - Soundtrack,0,banda sonora,
+Diplomacy is Not an Option,Diplomacy is Not an Option - Wallpapers,0,extra,
+Transport Fever 3,Transport Fever 3: Deluxe Upgrade,0,mejora de edición (DLC),
+Clair Obscur: Expedition 33,Clair Obscur: Expedition 33 - Deluxe Edition Upgrade,0,mejora de edición (DLC),
+War for the Overworld,War for the Overworld: Crucible,0,expansión,
+Tavern Master,Tavern Master Demo,0,demo,
+Imperial Grace,Imperial Grace - Demo,0,demo,
+Cyberpunk 2077,Cyberpunk 2077 REDmod,0,herramienta de mods,
+Valor Mortis,Valor Mortis ゲームガイド (Japanese Edition),0,guía impresa con la palabra Edition,
+Magic: The Gathering Arena,Magic: The Gathering,0,juego de cartas físico vs videojuego,
+Portal 2,POSTAL 2,0,una letra de diferencia,
+WWE 2K26,WWE 2K25 - PlayStation 4,0,año distinto,
+Wartales,WARTILE,0,nombre parecido,
+Gamble With Your Friends,Golf With Your Friends - Ultimate Edition,0,nombre parecido,
+Waterpark Simulator,WaterPark Simulator 3D,0,juego distinto con nombre casi igual,
+Hell Let Loose: Vietnam,Hell Let Loose Deluxe Edition - PlayStation 5,0,juego base vs entrega con subtítulo,
+Tales from the Borderlands,New Tales from the Borderlands - Deluxe Edition (PS4),0,secuela con prefijo New,
+Trails in the Sky 1st Chapter,Trails in the Sky 2nd Chapter,0,ordinal distinto,
+Monster Hunter Wilds,Monster Hunter: World,0,subtítulo distinto,
+Assetto Corsa,Assetto Corsa EVO,0,secuela con sufijo,
+Assetto Corsa EVO,Assetto Corsa Rally,0,spin-off,
+ARK: Survival Ascended,ARK: Survival Evolved,0,remake vs original,
+Assassin’s Creed Shadows,Assassin's Creed Valhalla,0,"misma saga, subtítulo distinto",
+"Warhammer 40,000: Dawn of War IV","Warhammer 40,000: Dawn of War - Definitive Edition",0,secuela romana vs edición del original,
+Call of Duty®: Modern Warfare® III,Call of Duty®: Modern Warfare®,0,romano vs sin número,
+Call of Duty®: Modern Warfare® 2 (2009),Call of Duty®: Modern Warfare®,0,año entre paréntesis,
+Call of Duty®: Black Ops III,Call of Duty®: Black Ops,0,romano vs sin número,
+Call of Duty®: Black Ops,Call of Duty®: Black Ops Cold War,0,subtítulo extra,
+God of War Ragnarök,God of War,0,secuela con subtítulo y diacrítico,
+Total War: WARHAMMER III,Total War: WARHAMMER II,0,romanos consecutivos,
+PowerWash Simulator 2,PowerWash Simulator,0,secuela,
+Minecraft Dungeons II,Minecraft Dungeons,0,secuela romana,
+Company of Heroes 3,Company of Heroes 2,0,números consecutivos,
+Graveyard Keeper 2,Graveyard Keeper,0,secuela,
+Cities: Skylines II,Cities: Skylines,0,secuela romana,
+Slay the Spire 2,Slay the Spire,0,secuela,
+Escape from Tarkov,Escape from Playtime,0,nombre parecido,

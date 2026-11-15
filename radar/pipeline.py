@@ -407,6 +407,8 @@ class Pipeline:
         applied = db.apply_manual_ids(self.conn, self.s.path("manual_ids"))
         if applied:
             print(f"  [ids] {applied} juegos con IDs cargados a mano")
+        hard = db.mark_hard_cases(self.conn)
+        print(f"  [casos difíciles] {hard} juegos del catálogo")
         games = db.load_games(self.conn, limit)
         active = scrapers.build(self.s["sources"])
         jobs = [FetchJob(r, sc, None) for sc in active.values() for r in sc.batch_requests(games)]

@@ -96,7 +96,9 @@ Los resultados quedan en `bench/results/`. El último resumen aparece en la pág
 python -m radar validate-matching --sweep
 ```
 
-Mide precisión y exhaustividad contra `data/validation_pairs.csv` (pares revisados a mano) para varios umbrales.
+Mide precisión y exhaustividad contra `data/validation_pairs.csv` para varios umbrales. Cada par dice si los dos títulos son el mismo juego (`same`), qué lo hace difícil (`note`) y si ya lo revisó una persona (`revisado`). Los pares salen de casos reales del catálogo: ediciones, plataformas en el título, números romanos, DLC, demos, secuelas y nombres parecidos. Con el umbral de 0,84 no hay falsos positivos.
+
+Cada corrida marca además los **casos difíciles** del catálogo: remasterizaciones, ediciones, números romanos, secuelas y juegos de la misma saga con nombres parecidos. Se ven en el panel de métricas con su motivo. Un juego también se puede marcar a mano con `games add --hard`.
 
 ## Fuentes
 

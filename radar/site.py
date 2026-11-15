@@ -118,5 +118,8 @@ def _metrics(conn, data_dir: Path, last_run) -> None:
             FROM match_flags f JOIN games g ON g.id=f.game_id WHERE f.run_id=? ORDER BY f.reason, g.canonical_title
             """, (rid,))]
         metrics["failures"] = [dict(r) for r in conn.execute("SELECT * FROM failures WHERE run_id=?", (rid,))]
+    metrics["hard_cases"] = [dict(r) for r in conn.execute(
+        "SELECT canonical_title AS game, hard_reason AS reason FROM games "
+        "WHERE active=1 AND hard_case=1 ORDER BY canonical_title")]
     # La curva de speedup la escribe bench/run_sweeps.py en data/bench.json; se respeta si existe.
     (data_dir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, default=str), encoding="utf-8")
