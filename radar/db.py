@@ -241,6 +241,39 @@ def mark_hard_cases(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM games WHERE active=1 AND hard_case=1").fetchone()[0]
 
 
+def update_titles_and_kinds(conn: sqlite3.Connection) -> int:
+    """Títulos alternativos (los nombres con que otras tiendas venden el juego, de ofertas
+    aceptadas con puntaje alto) y tipo de producto de cada juego activo. En los juegos
+    agregados a mano se suman a los títulos que ya tenían y el tipo no se toca.
+    Devuelve cuántos juegos tienen al menos un título alternativo."""
+    from .matching.normalize import normalize
+    from .matching.titles import MIN_SCORE, alt_titles, kind_for
+    seen: dict[int, list[str]] = {}
+    for gid, title in conn.execute(
+            "SELECT game_id, title_seen FROM price_observations WHERE store != 'Steam' AND match_score >= ? "
+            "ORDER BY CASE store WHEN 'Amazon' THEN 1 ELSE 0 END, id DESC", (MIN_SCORE,)):
+        seen.setdefault(gid, []).append(title)
+    games = conn.execute("SELECT id, canonical_title, alt_titles, origin, kind FROM games WHERE active=1").fetchall()
+    proposed = {g["id"]: alt_titles(g["canonical_title"], seen.get(g["id"], [])) for g in games}
+    # Un nombre que corresponde a más de un juego del catálogo es ambiguo («Modern Warfare 2»
+    # es de 2009 y de 2022): no sirve como título alternativo de ninguno.
+    owners: dict[str, set[int]] = {}
+    for g in games:
+        owners.setdefault(normalize(g["canonical_title"]), set()).add(g["id"])
+        for t in proposed[g["id"]]:
+            owners.setdefault(normalize(t), set()).add(g["id"])
+    updates = []
+    for g in games:
+        manual = g["origin"] == "manual"
+        current = json.loads(g["alt_titles"] or "[]") if manual else []
+        new = [t for t in proposed[g["id"]] if len(owners[normalize(t)]) == 1 and t not in current]
+        kind = g["kind"] if manual else kind_for(g["canonical_title"], known_game=True)
+        updates.append((json.dumps(current + new, ensure_ascii=False), kind, g["id"]))
+    conn.executemany("UPDATE games SET alt_titles=?, kind=? WHERE id=?", updates)
+    conn.commit()
+    return sum(1 for a, _, _ in updates if a != "[]")
+
+
 MANUAL_ID_FIELDS = ("hltb_id", "metacritic_slug", "xbox_url")
 # Juegos marcados como prioridad en la hoja: los más visibles del sitio.
 MANUAL_PRIORITY = 50

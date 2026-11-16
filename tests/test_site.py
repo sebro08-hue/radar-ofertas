@@ -30,6 +30,8 @@ class SiteCardsTest(unittest.TestCase):
             cards = {c["title"]: c for c in json.loads((dist / "data" / "cards.json").read_text())["cards"]}
             self.assertEqual(set(cards), {"Solo en Steam", "En dos tiendas"})       # sin precio no se publica
             self.assertEqual(cards["Solo en Steam"]["store_count"], 1)
+            self.assertEqual(cards["Solo en Steam"]["alt_titles"], [])
+            self.assertEqual(cards["Solo en Steam"]["kind"], "game")
             self.assertEqual(cards["Solo en Steam"]["best_price"], 10.0)
             self.assertEqual(cards["En dos tiendas"]["store_count"], 3)
             self.assertEqual(cards["En dos tiendas"]["best_store"], "Amazon")

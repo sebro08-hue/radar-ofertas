@@ -75,7 +75,8 @@ function fillSelect(sel, values) {
 }
 
 function matches(c, f) {
-  return (!f.q || c.title.toLowerCase().includes(f.q)) && (!f.kind || c.kind === f.kind) &&
+  const names = [c.title, ...(c.alt_titles || [])].join(" ").toLowerCase();
+  return (!f.q || names.includes(f.q)) && (!f.kind || c.kind === f.kind) &&
     (!f.platform || c.platforms.includes(f.platform)) && (!f.format || c.formats.includes(f.format)) &&
     (!f.store || c.stores.includes(f.store)) && (!f.compare || (f.compare === "multi") === (c.store_count > 1));
 }
