@@ -36,6 +36,9 @@ class SiteCardsTest(unittest.TestCase):
             self.assertEqual(cards["En dos tiendas"]["best_price"], 12.0)
             self.assertTrue((dist / "data" / "games" / f"{solo}.json").is_file())
             self.assertFalse((dist / "data" / "games" / f"{nada}.json").exists())
+            html = (dist / "index.html").read_text(encoding="utf-8")
+            self.assertRegex(html, r'href="style\.css\?v=[0-9a-f]{10}"')     # el navegador no usa una versión vieja
+            self.assertRegex(html, r'src="app\.js\?v=[0-9a-f]{10}"')
             conn.close()
 
 
