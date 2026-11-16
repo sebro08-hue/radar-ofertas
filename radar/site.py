@@ -91,6 +91,7 @@ def build(conn, settings) -> Path:
             "discount_pct": discount, "on_sale": discount > 0,
             "historic_low": best["price"] <= hist_min.get(gid, best["price"]),
             "rating": rts.get("metacritic") or rts.get("steam_users"),
+            "rating_source": "metacritic" if rts.get("metacritic") else ("steam_users" if rts.get("steam_users") else None),
             "stale_sources": stale,
         }
         cards.append(card)
