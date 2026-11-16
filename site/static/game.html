@@ -98,13 +98,24 @@ function staleHtml(statuses) {
   return `<section class="panel warn"><h3>Fuentes sin actualizar</h3><ul>${items}</ul></section>`;
 }
 
-// Historial: el menor precio de cada tienda por día (una tienda puede tener varias ediciones).
-function historyChart(history) {
-  const days = [...new Set(history.map(h => h.observed_at.slice(0, 10)))].sort((a, b) => a.localeCompare(b));
+// Historial: el precio de cierre de cada tienda por día, es decir, el de su última consulta
+// de ese día (si una tienda tiene varias ediciones, la más barata de esa consulta).
+function closingPrices(history) {
   const byStore = {};
   for (const h of history) {
     const day = h.observed_at.slice(0, 10), s = (byStore[h.store] ??= {});
-    s[day] = Math.min(s[day] ?? Infinity, h.price);
+    const cur = s[day];
+    if (!cur || h.observed_at > cur.at) s[day] = { at: h.observed_at, price: h.price };
+    else if (h.observed_at === cur.at) cur.price = Math.min(cur.price, h.price);
+  }
+  return byStore;
+}
+
+function historyChart(history) {
+  const days = [...new Set(history.map(h => h.observed_at.slice(0, 10)))].sort((a, b) => a.localeCompare(b));
+  const byStore = {};
+  for (const [store, perDay] of Object.entries(closingPrices(history))) {
+    byStore[store] = Object.fromEntries(Object.entries(perDay).map(([d, v]) => [d, v.price]));
   }
   const series = Object.entries(byStore).map(([store, prices]) => ({ store, values: days.map(d => prices[d] ?? null) }));
   // Tienda dibujada debajo (índice menor) con el mismo precio ese día, o -1.
@@ -119,7 +130,7 @@ function historyChart(history) {
       // la de encima va punteada (se ve la de abajo por los huecos) y su punto es un anillo
       // relleno con el color de la de abajo. En Chart.js, menor `order` = se dibuja encima.
       datasets: series.map((s, i) => ({
-        label: s.store, data: s.values, spanGaps: true, stepped: true, order: -i,
+        label: s.store, data: s.values, spanGaps: true, tension: 0, order: -i,
         borderColor: STORE_COLORS[s.store], backgroundColor: STORE_COLORS[s.store],
         borderWidth: 3, pointRadius: 4, pointHoverRadius: 6, pointBorderWidth: 2,
         pointBackgroundColor: ctx => {
