@@ -25,17 +25,39 @@
   <div class="table-wrap"><table id="hard"><thead><tr><th>Juego</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
   <h3>Cola de fallidos</h3>
   <div class="table-wrap"><table id="failures"></table></div>
-  <h2>Speedup (modo replay)</h2>
+  <h2>Rendimiento (modo replay)</h2>
   <p class="meta" id="hw"></p>
-  <div class="chart-box"><canvas id="speedup-io" height="110"></canvas></div>
-  <div class="chart-box"><canvas id="speedup-cpu" height="110"></canvas></div>
+  <h3>Versión secuencial (T<sub>sec</sub>) por etapa</h3>
+  <div class="table-wrap"><table id="tsec"><thead><tr><th>Etapa</th><th>Mediana (mín–máx)</th><th>Desv. estándar</th></tr></thead><tbody></tbody></table></div>
+  <h3>Descarga: workers de E/S (modo concurrent)</h3>
+  <div class="chart-box"><canvas id="ch-io" height="120"></canvas></div>
+  <div class="table-wrap"><table id="t-io"><thead><tr><th>Medida</th><th>p</th><th>Mediana (mín–máx)</th></tr></thead><tbody></tbody></table></div>
+  <h3>Emparejamiento: workers de cálculo (modo parallel)</h3>
+  <div class="chart-box"><canvas id="ch-cpu" height="120"></canvas></div>
+  <div class="table-wrap"><table id="t-cpu"><thead><tr><th>Medida</th><th>p</th><th>Mediana (mín–máx)</th></tr></thead><tbody></tbody></table></div>
+  <h3>Eficiencia y Karp–Flatt</h3>
+  <div class="chart-box"><canvas id="ch-eff" height="120"></canvas></div>
+  <div class="chart-box"><canvas id="ch-kf" height="120"></canvas></div>
+  <h3>Etapas al variar la latencia simulada</h3>
+  <div class="table-wrap"><table id="t-lat"><thead><tr><th>Latencia</th></tr></thead><tbody></tbody></table></div>
+  <h3>Etapas por modo</h3>
+  <div class="table-wrap"><table id="t-modes"><thead><tr><th>Modo</th></tr></thead><tbody></tbody></table></div>
+  <h2>Experimento de contención</h2>
+  <p class="meta" id="cont-meta"></p>
+  <div class="chart-box"><canvas id="ch-cont" height="120"></canvas></div>
+  <div class="table-wrap"><table id="t-cont"><thead><tr><th>Estrategia</th><th>Hilos</th></tr></thead><tbody></tbody></table></div>
 </main>
 <script src="app.js"></script>
-<script>
+<script type="module">
 const $ = id => document.getElementById(id);
 const table = (el, head, rows) => { el.innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${head.length}">—</td></tr>`}</tbody>`; };
 
-fetch("data/metrics.json").then(r => r.json()).then(m => {
+async function loadJson(url) {
+  const r = await fetch(url);
+  return r.ok ? r.json() : null;
+}
+
+function renderRun(m) {
   const run = m.run || {};
   const st = run.stage_times ? JSON.parse(run.stage_times) : {};
   $("run").innerHTML = [["Fecha", fmtDate(run.finished_at)], ["Duración", run.total_s ? run.total_s.toFixed(1) + " s" : "—"],
@@ -47,23 +69,86 @@ fetch("data/metrics.json").then(r => r.json()).then(m => {
   $("hard-title").textContent = `Casos difíciles del catálogo (${hard.length})`;
   table($("hard"), ["Juego", "Motivo"], hard.map(h => [h.game, h.reason ?? "marcado a mano"]));
   table($("failures"), ["Fuente", "URL", "Error", "Recuperada"], m.failures.map(f => [f.source, f.url, f.error, f.recovered ? "sí" : "no"]));
-});
-
-function speedChart(el, title, series) {
-  new Chart(el, {
-    type: "line",
-    data: { datasets: series.map(([label, pts]) => ({ label, data: pts.map(p => ({ x: p.p, y: p.S_abs })) })) },
-    options: { plugins: { title: { display: true, text: title } },
-      scales: { x: { type: "linear", title: { display: true, text: "workers" } }, y: { title: { display: true, text: "speedup absoluto" } } } },
-  });
 }
-fetch("data/bench.json").then(r => r.ok ? r.json() : null).then(b => {
-  if (!b) { $("hw").textContent = "Todavía no hay barridos (python bench/run_sweeps.py)."; return; }
+
+const f3 = v => v == null ? "—" : v.toFixed(3);
+const f2 = v => v == null ? "—" : v.toFixed(2);
+const sec = st => `${f2(st.median)} s (${f2(st.min)}–${f2(st.max)})`;
+const STAGES = ["total", "discover", "fetch_parse", "retry_failed", "igdb", "match", "aggregate"];
+const xLog = { type: "logarithmic", title: { display: true, text: "workers (p)" },
+  ticks: { callback: v => [1, 2, 4, 8, 12, 16, 24, 32, 64].includes(v) ? v : "" } };
+const pts = (c, k) => c.points.map(p => ({ x: p.p, y: p[k] }));
+function line(el, title, yTitle, datasets) {
+  return new Chart(el, { type: "line", data: { datasets },
+    options: { plugins: { title: { display: true, text: title } },
+      scales: { x: xLog, y: { title: { display: true, text: yTitle }, beginAtZero: true } } } });
+}
+const ds = (label, data, dashed) => ({ label, data, borderDash: dashed ? [6, 4] : [], pointRadius: dashed ? 0 : 3 });
+const curveRows = (label, c) => c.points.map(p => [label, p.p, sec(p), f2(p.S_abs), f2(p.S_rel), f2(p.E), f3(p.karp_flatt), f2(p.amdahl)]);
+const CURVE_HEAD = ["Medida", "p", "Mediana (mín–máx)", "S_abs", "S_rel", "E", "Karp–Flatt e", "Amdahl"];
+
+function hardwareText(b) {
   const h = b.hardware;
-  $("hw").textContent = `${h.processor} · ${h.physical_cores ?? "?"} núcleos físicos / ${h.logical_cpus} lógicos · SMT ${h.smt ? "sí" : "no"} · ${h.memory_gb ?? "?"} GB · Python ${h.python} · latencia ${b.latency_ms} ms ±${b.jitter_ms}`;
-  speedChart($("speedup-io"), "Descarga (concurrente)", [["fetch+parse", b.io.fetch_parse], ["pipeline", b.io.total]]);
-  speedChart($("speedup-cpu"), "Emparejamiento (paralelo)", Object.entries(b.cpu).flatMap(([ex, c]) => [[`match (${ex})`, c.match], [`pipeline (${ex})`, c.total]]));
-});
+  const hybrid = h.p_core_cpus ? " (híbrido: núcleos P = CPU " + h.p_core_cpus + ", núcleos E = CPU " + h.e_core_cpus + ")" : "";
+  return [`${h.processor}`, `${h.physical_cores ?? "?"} núcleos físicos / ${h.logical_cpus} lógicos`,
+    `SMT ${h.smt ? "activo" : "no"}${hybrid}`, `${h.memory_gb ?? "?"} GB`, h.os, `Python ${h.python}`,
+    `latencia ${b.latency_ms} ms`, `${b.repeats} repeticiones por configuración (mediana, mín–máx).`].join(" · ");
+}
+
+function latencyLabel(r) {
+  const jitter = r.jitter_ms ? " ±" + r.jitter_ms : "";
+  return `${r.latency_ms} ms${jitter}`;
+}
+
+function renderBench(b) {
+  if (!b) { $("hw").textContent = "Todavía no hay barridos (python bench/run_sweeps.py)."; return; }
+  $("hw").textContent = hardwareText(b);
+  table($("tsec"), ["Etapa", "Mediana (mín–máx)", "Desv. estándar"], STAGES.map(k => [k, sec(b.T_sec[k]), f3(b.T_sec[k].stdev)]));
+
+  const io = b.io;
+  line($("ch-io"), "Speedup de la descarga (concurrente)", "speedup", [
+    ds("fetch+parse S_abs", pts(io.fetch_parse, "S_abs")), ds("fetch+parse S_rel", pts(io.fetch_parse, "S_rel")),
+    ds("pipeline S_abs", pts(io.total, "S_abs")),
+    ds(`Amdahl pipeline (f=${f3(io.total.f)})`, pts(io.total, "amdahl"), true)]);
+  table($("t-io"), CURVE_HEAD, [...curveRows("fetch+parse", io.fetch_parse), ...curveRows("pipeline", io.total)]);
+
+  const cpu = b.cpu, exs = Object.keys(cpu);
+  line($("ch-cpu"), "Speedup del emparejamiento (paralelo)", "speedup", exs.flatMap(ex => [
+    ds(`match S_rel (${ex})`, pts(cpu[ex].match, "S_rel")), ds(`pipeline S_abs (${ex})`, pts(cpu[ex].total, "S_abs")),
+    ds(`Amdahl match ${ex} (f=${f3(cpu[ex].match.f)})`, pts(cpu[ex].match, "amdahl"), true)]));
+  table($("t-cpu"), CURVE_HEAD, exs.flatMap(ex => [...curveRows(`match (${ex})`, cpu[ex].match), ...curveRows(`pipeline (${ex})`, cpu[ex].total)]));
+
+  line($("ch-eff"), "Eficiencia E(p) = S_rel / p", "eficiencia", [
+    ds("fetch+parse (E/S)", pts(io.fetch_parse, "E")), ...exs.map(ex => ds(`match (${ex})`, pts(cpu[ex].match, "E")))]);
+  const kf = c => c.points.filter(p => p.karp_flatt != null).map(p => ({ x: p.p, y: p.karp_flatt }));
+  line($("ch-kf"), "Fracción serial estimada (Karp–Flatt)", "e", [
+    ds("fetch+parse (E/S)", kf(io.fetch_parse)), ...exs.map(ex => ds(`match (${ex})`, kf(cpu[ex].match))),
+    ds("pipeline (E/S)", kf(io.total))]);
+
+  table($("t-lat"), ["Latencia", ...STAGES], (b.latency || []).map(r =>
+    [latencyLabel(r), ...STAGES.map(k => f2(r[k].median))]));
+  const modes = (b.stages || []).filter(r => r.sweep !== "latency" && r.sweep !== "jitter");
+  table($("t-modes"), ["Modo", "Ejecutor", "E/S", "Cálculo", ...STAGES], modes.map(r =>
+    [r.mode, r.mode === "parallel" ? r.executor : "—", r.fetch_workers, r.match_workers, ...STAGES.map(k => f2(r[k].median))]));
+}
+
+function renderContention(c) {
+  if (!c) { $("cont-meta").textContent = "Todavía no hay mediciones (python bench/contention.py)."; return; }
+  $("cont-meta").textContent = `${c.items.toLocaleString("es")} incrementos repartidos entre los hilos · ${c.repeats} repeticiones · Python ${c.python} · ${c.logical_cpus} núcleos lógicos.`;
+  const variants = [...new Set(c.rows.map(r => r.variant))];
+  const NAMES = { unsafe: "sin sincronización", lock: "lock global", local: "estado local por hilo", queue: "colección concurrente" };
+  line($("ch-cont"), "Tiempo por estrategia de agregación", "segundos (mediana)",
+    variants.map(v => ds(NAMES[v] || v, c.rows.filter(r => r.variant === v).map(r => ({ x: r.threads, y: r.median_s })))));
+  table($("t-cont"), ["Estrategia", "Hilos", "Mediana (mín–máx)", "Conteos perdidos (peor caso)", "Correcto"],
+    c.rows.map(r => [NAMES[r.variant] || r.variant, r.threads, `${f3(r.median_s)} s (${f3(r.min_s)}–${f3(r.max_s)})`,
+      r.lost_updates_max.toLocaleString("es"), r.correct ? "sí" : "no"]));
+}
+
+const [metrics, bench, contention] = await Promise.all(
+  ["data/metrics.json", "data/bench.json", "data/contention.json"].map(loadJson));
+if (metrics) renderRun(metrics);
+renderBench(bench);
+renderContention(contention);
 </script>
 </body>
 </html>

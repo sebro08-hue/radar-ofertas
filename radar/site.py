@@ -121,5 +121,9 @@ def _metrics(conn, data_dir: Path, last_run) -> None:
     metrics["hard_cases"] = [dict(r) for r in conn.execute(
         "SELECT canonical_title AS game, hard_reason AS reason FROM games "
         "WHERE active=1 AND hard_case=1 ORDER BY canonical_title")]
-    # La curva de speedup la escribe bench/run_sweeps.py en data/bench.json; se respeta si existe.
+    # Resultados de los benchmarks (bench/run_sweeps.py y bench/contention.py), si existen.
+    for name in ("bench.json", "contention.json"):
+        src = ROOT / "data" / name
+        if src.is_file():
+            shutil.copy(src, data_dir / name)
     (data_dir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, default=str), encoding="utf-8")

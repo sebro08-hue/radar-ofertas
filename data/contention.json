@@ -1,0 +1,189 @@
+{
+  "generated_at": "20261115-165904",
+  "items": 2000000,
+  "repeats": 5,
+  "python": "3.12.3",
+  "logical_cpus": 12,
+  "rows": [
+    {
+      "variant": "unsafe",
+      "threads": 1,
+      "median_s": 0.09393314899989491,
+      "min_s": 0.09118174999912299,
+      "max_s": 0.09585578499991243,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "unsafe",
+      "threads": 2,
+      "median_s": 0.10594939099973999,
+      "min_s": 0.0979880390004837,
+      "max_s": 0.11852244300007442,
+      "lost_updates_max": 141647,
+      "correct": false
+    },
+    {
+      "variant": "unsafe",
+      "threads": 4,
+      "median_s": 0.11599931199998537,
+      "min_s": 0.11278948600011063,
+      "max_s": 0.11850055499962764,
+      "lost_updates_max": 332260,
+      "correct": false
+    },
+    {
+      "variant": "unsafe",
+      "threads": 8,
+      "median_s": 0.12848225600009755,
+      "min_s": 0.12358328599930246,
+      "max_s": 0.16060742799982108,
+      "lost_updates_max": 633843,
+      "correct": false
+    },
+    {
+      "variant": "unsafe",
+      "threads": 12,
+      "median_s": 0.14801660099965375,
+      "min_s": 0.1288707900002919,
+      "max_s": 0.17199819899997237,
+      "lost_updates_max": 850659,
+      "correct": false
+    },
+    {
+      "variant": "lock",
+      "threads": 1,
+      "median_s": 0.29786017000060383,
+      "min_s": 0.29440660499949445,
+      "max_s": 0.30153083200002584,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "lock",
+      "threads": 2,
+      "median_s": 1.3566703859996778,
+      "min_s": 1.3304349720001483,
+      "max_s": 1.3616201120003097,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "lock",
+      "threads": 4,
+      "median_s": 3.067733529999714,
+      "min_s": 2.9984291119999398,
+      "max_s": 3.102495655999519,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "lock",
+      "threads": 8,
+      "median_s": 3.65792756799965,
+      "min_s": 3.5930910690003657,
+      "max_s": 3.670420268000271,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "lock",
+      "threads": 12,
+      "median_s": 3.9275425550004,
+      "min_s": 3.877611472999888,
+      "max_s": 3.9521432670007925,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "local",
+      "threads": 1,
+      "median_s": 0.2541824870004348,
+      "min_s": 0.2491898880007284,
+      "max_s": 0.2557171420003215,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "local",
+      "threads": 2,
+      "median_s": 0.29404412700023386,
+      "min_s": 0.26552608300062275,
+      "max_s": 0.3178959369997756,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "local",
+      "threads": 4,
+      "median_s": 0.3243298629995479,
+      "min_s": 0.3112309960006314,
+      "max_s": 0.3895125420003751,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "local",
+      "threads": 8,
+      "median_s": 0.3631512230003864,
+      "min_s": 0.34336236899980577,
+      "max_s": 0.40009557800021867,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "local",
+      "threads": 12,
+      "median_s": 0.3778344989996185,
+      "min_s": 0.37271257900010824,
+      "max_s": 0.41340154799945594,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "queue",
+      "threads": 1,
+      "median_s": 0.21262590499918588,
+      "min_s": 0.21234662299957563,
+      "max_s": 0.22345232800034864,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "queue",
+      "threads": 2,
+      "median_s": 0.22084611599893833,
+      "min_s": 0.21566753999923094,
+      "max_s": 0.22115862099963124,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "queue",
+      "threads": 4,
+      "median_s": 0.22823530200003006,
+      "min_s": 0.21960710499934066,
+      "max_s": 0.2343110069996328,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "queue",
+      "threads": 8,
+      "median_s": 0.2210271969997848,
+      "min_s": 0.22065626800031168,
+      "max_s": 0.22791701299956912,
+      "lost_updates_max": 0,
+      "correct": true
+    },
+    {
+      "variant": "queue",
+      "threads": 12,
+      "median_s": 0.2286656350006524,
+      "min_s": 0.22539961300026334,
+      "max_s": 0.23033618799945543,
+      "lost_updates_max": 0,
+      "correct": true
+    }
+  ]
+}

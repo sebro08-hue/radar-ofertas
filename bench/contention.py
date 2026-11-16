@@ -146,16 +146,32 @@ def run(n_items: int = 2_000_000, threads=(1, 2, 4, 8), repeats: int = 5,
 
 def main():
     import argparse
+    import json
+    import os
+    from datetime import datetime
+    from pathlib import Path
+
+    logical = os.cpu_count() or 4
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--items", type=int, default=2_000_000)
-    ap.add_argument("--threads", type=int, nargs="+", default=[1, 2, 4, 8])
+    ap.add_argument("--threads", type=int, nargs="+",
+                    default=sorted({1, 2, 4, 8, logical}))
     ap.add_argument("--repeats", type=int, default=5)
+    ap.add_argument("--no-save", action="store_true",
+                    help="no guardar data/contention.json (el resumen que muestra el panel de métricas)")
     a = ap.parse_args()
     rows = run(a.items, tuple(a.threads), a.repeats)
     print(f"{'variante':<8} {'hilos':>5} {'mediana':>9} {'min':>8} {'max':>8} {'perdidos':>9} correcto")
     for r in rows:
         print(f"{r['variant']:<8} {r['threads']:>5} {r['median_s']:>8.3f}s {r['min_s']:>7.3f}s "
               f"{r['max_s']:>7.3f}s {r['lost_updates_max']:>9} {r['correct']}")
+    if not a.no_save:
+        out = Path(__file__).resolve().parent.parent / "data" / "contention.json"   # ruta fija
+        out.write_text(json.dumps({
+            "generated_at": datetime.now().strftime("%Y%m%d-%H%M%S"), "items": a.items,
+            "repeats": a.repeats, "python": sys.version.split()[0], "logical_cpus": logical,
+            "rows": rows}, indent=2), encoding="utf-8")
+        print("resumen en", out)
 
 
 if __name__ == "__main__":
