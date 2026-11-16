@@ -120,7 +120,7 @@ Cada corrida marca además los **casos difíciles** del catálogo: remasterizaci
 |---|---|---|
 | Steam | catálogo, precio, reseñas de usuarios | HTML (catálogo) y API de precios por lotes de 100 |
 | GOG | precio | API pública de catálogo |
-| Xbox Store | precio y plataformas (Xbox One, Series X\|S, PC) | HTML; enlace por sitemap, 150 juegos por día en rotación |
+| Xbox Store | precio y plataformas (Xbox One, Series X\|S, PC) | HTML; enlace por sitemap, todos los juegos enlazados en cada corrida |
 | Amazon | precio (físico y digital) | HTML, 100 juegos por día en rotación |
 | Metacritic | Metascore | HTML |
 | How Long To Beat | duración | HTML, por id del juego (cargado a mano en `data/ids_manual.csv`) |
