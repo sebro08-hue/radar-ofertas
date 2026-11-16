@@ -77,7 +77,7 @@ const REASONS = {
   dlc_or_bundle: ["DLC o paquete", "El resultado parece un extra (DLC, banda sonora, paquete), no el juego."],
   unmatched: ["Sin emparejar", "La tienda respondió, pero ningún resultado se parece lo suficiente (suele ser que no lo vende)."],
 };
-const DOUBTFUL = ["near_threshold", "edition", "dlc_or_bundle"];
+const DOUBTFUL = new Set(["near_threshold", "edition", "dlc_or_bundle"]);
 const FLAG_PAGE = 50;
 let flagRows = [], flagShown = FLAG_PAGE;
 
@@ -98,7 +98,7 @@ function renderFlagSummary(flags) {
 
 function filteredFlags() {
   const reason = $("flag-reason").value, store = $("flag-store").value, q = $("flag-q").value.trim().toLowerCase();
-  const okReason = f => !reason || (reason === "doubtful" ? DOUBTFUL.includes(f.reason) : f.reason === reason);
+  const okReason = f => !reason || (reason === "doubtful" ? DOUBTFUL.has(f.reason) : f.reason === reason);
   const okText = f => !q || (f.game + " " + (f.candidate || "")).toLowerCase().includes(q);
   // lo más dudoso primero: más cerca del umbral
   return flagRows.filter(f => okReason(f) && (!store || f.store === store) && okText(f))
