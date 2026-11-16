@@ -113,6 +113,10 @@ tr:last-child td { border-bottom: 0; }
 
 footer { max-width: 1200px; margin: 0 auto; padding: 8px 16px 32px; color: var(--muted); font-size: 12px; }
 
+@media (prefers-reduced-motion: reduce) {
+  .card, .mainnav a { transition: none; }
+  .card:hover { transform: none; }
+}
 @media (max-width: 720px) {
   .topbar-inner { grid-template-columns: auto 1fr; height: auto; padding-top: 8px; row-gap: 0; }
   .mainnav { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; justify-content: center; }

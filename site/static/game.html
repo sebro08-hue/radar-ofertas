@@ -21,7 +21,7 @@
 <main id="main"><p>Cargando…</p></main>
 <footer>Precios en USD. Cada precio enlaza a la tienda donde se obtuvo.</footer>
 <script src="app.js"></script>
-<script>
+<script type="module">
 const FORMATS = { digital: "Digital", physical: "Físico" };
 
 function durationText(d) {
@@ -32,14 +32,15 @@ function durationText(d) {
 
 function ratingsHtml(ratings) {
   if (!ratings.length) return "—";
-  return `<div class="ratings">${ratings.map(r =>
-    `<span>${stars(r.score, r.source)} <span class="source">${esc(SOURCE_NAMES[r.source] || r.source)}</span></span>`).join("")}</div>`;
+  const items = ratings.map(r =>
+    `<span>${stars(r.score, r.source)} <span class="source">${esc(SOURCE_NAMES[r.source] || r.source)}</span></span>`);
+  return `<div class="ratings">${items.join("")}</div>`;
 }
 
 function staleHtml(statuses) {
   const stale = statuses.filter(s => !s.ok);
   if (!stale.length) return "";
-  const items = stale.map(s => `${esc(s.source)} (último dato: ${s.last_ok ? fmtDate(s.last_ok) : "nunca"})`).join(", ");
+  const items = stale.map(s => esc(s.source) + " (último dato: " + (s.last_ok ? fmtDate(s.last_ok) : "nunca") + ")").join(", ");
   return `<p><span class="tag stale">Fuentes sin actualizar: ${items}</span></p>`;
 }
 
@@ -80,7 +81,9 @@ function render(g) {
 }
 
 const id = new URLSearchParams(location.search).get("id");
-fetch(`data/games/${encodeURIComponent(id)}.json`).then(r => r.json()).then(render);
+const res = await fetch(`data/games/${encodeURIComponent(id)}.json`);
+if (res.ok) render(await res.json());
+else document.getElementById("main").innerHTML = "<p>No encontramos ese juego.</p>";
 </script>
 </body>
 </html>
