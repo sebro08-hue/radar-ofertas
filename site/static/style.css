@@ -26,7 +26,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px; }
 .pct { color: var(--sale); font-weight: 600; margin-left: 6px; }
 .meta { color: var(--muted); font-size: 12px; }
 .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; margin-right: 4px; }
-.tag.low { color: var(--low); } .tag.stale { color: var(--stale); }
+.tag.low { color: var(--low); } .tag.stale { color: var(--stale); } .tag.single { color: var(--muted); }
 .pager { display: flex; justify-content: center; gap: 8px; margin: 20px 0; align-items: center; }
 .pager button { padding: 6px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; cursor: pointer; }
 table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }

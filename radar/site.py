@@ -15,13 +15,22 @@ from .config import ROOT
 STATIC = ROOT / "site" / "static"
 
 
+# Una oferta que la tienda no volvió a confirmar en este tiempo ya no se muestra.
+MAX_OFFER_AGE_DAYS = 14
+
+
 def _latest_prices(conn) -> dict[int, list[dict]]:
-    """Última observación de cada (juego, tienda, url)."""
+    """Ofertas vigentes de cada juego: de cada tienda, solo las de la última ejecución
+    que la consultó para ese juego (si un emparejamiento cambió, la oferta vieja no
+    queda colgada) y de los últimos MAX_OFFER_AGE_DAYS días. Precio > 0 siempre."""
     rows = conn.execute("""
         SELECT p.* FROM price_observations p
-        JOIN (SELECT game_id, store, url, MAX(id) AS mid FROM price_observations
-              GROUP BY game_id, store, url) last ON last.mid = p.id
-        ORDER BY p.game_id, p.price""").fetchall()
+        JOIN (SELECT game_id, store, MAX(run_id) AS r FROM price_observations
+              WHERE price > 0 GROUP BY game_id, store) last
+          ON last.game_id = p.game_id AND last.store = p.store AND last.r = p.run_id
+        WHERE p.price > 0 AND p.observed_at >= strftime('%Y-%m-%dT%H:%M:%S', 'now', ?)
+          AND p.id IN (SELECT MAX(id) FROM price_observations GROUP BY game_id, store, url)
+        ORDER BY p.game_id, p.price""", (f"-{MAX_OFFER_AGE_DAYS} days",)).fetchall()
     out: dict[int, list[dict]] = {}
     for r in rows:
         out.setdefault(r["game_id"], []).append({
@@ -33,7 +42,7 @@ def _latest_prices(conn) -> dict[int, list[dict]]:
 
 def _min_history(conn) -> dict[int, float]:
     return {r[0]: r[1] for r in conn.execute(
-        "SELECT game_id, MIN(price) FROM price_observations WHERE currency='USD' GROUP BY game_id")}
+        "SELECT game_id, MIN(price) FROM price_observations WHERE currency='USD' AND price > 0 GROUP BY game_id")}
 
 
 def _latest_by(conn, table: str, cols: str) -> dict[int, list[dict]]:
@@ -66,7 +75,7 @@ def build(conn, settings) -> Path:
     for g in conn.execute("SELECT * FROM games WHERE active=1"):
         gid = g["id"]
         offers = [o for o in prices.get(gid, []) if o["currency"] == "USD"]
-        if len(offers) < 2:          # sin al menos 2 tiendas no hay nada que comparar
+        if not offers:               # sin ningún precio en USD no hay nada que mostrar
             continue
         best = min(offers, key=lambda o: o["price"])
         regular = best["regular"] or g["msrp"]
@@ -77,6 +86,7 @@ def build(conn, settings) -> Path:
             "id": gid, "title": g["canonical_title"], "image": g["image_url"],
             "platforms": json.loads(g["platforms"]), "kind": g["kind"],
             "formats": sorted({o["format"] for o in offers}), "stores": sorted({o["store"] for o in offers}),
+            "store_count": len({o["store"] for o in offers}),
             "best_price": best["price"], "best_store": best["store"], "regular": regular,
             "discount_pct": discount, "on_sale": discount > 0,
             "historic_low": best["price"] <= hist_min.get(gid, best["price"]),
@@ -86,7 +96,8 @@ def build(conn, settings) -> Path:
         cards.append(card)
 
         history = [dict(r) for r in conn.execute(
-            "SELECT store, price, observed_at FROM price_observations WHERE game_id=? ORDER BY observed_at", (gid,))]
+            "SELECT store, price, observed_at FROM price_observations WHERE game_id=? AND price > 0 "
+            "ORDER BY observed_at", (gid,))]
         dur = _preferred_duration(durations.get(gid, []))
         detail = {**card, "msrp": g["msrp"], "release_date": g["release_date"],
                   "alt_titles": json.loads(g["alt_titles"]), "offers": prices.get(gid, []),

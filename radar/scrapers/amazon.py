@@ -36,7 +36,7 @@ class AmazonStore(Scraper):
             if not h2 or not price:
                 continue
             money = parse_money(price.group(1))
-            if not money:
+            if not money or money[0] <= 0:     # sin precio real (gratis con Kindle, no disponible)
                 continue
             reg = REGULAR.search(block)
             reg_money = parse_money(reg.group(1)) if reg else None
