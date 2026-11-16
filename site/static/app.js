@@ -11,11 +11,12 @@ function fmtDate(iso) {
 const SOURCE_NAMES = { metacritic: "Metacritic", steam_users: "Usuarios de Steam" };
 
 // Calificación de 0 a 100 como estrellas (puntaje / 20) más el número.
-function stars(score, source) {
+function stars(score, source, withNumber = true) {
   if (score == null) return `<span class="meta">Sin calificación</span>`;
   const label = `${score} de 100${source ? " · " + (SOURCE_NAMES[source] || source) : ""}`;
+  const number = withNumber ? `<span class="score">${Math.round(score)}</span>` : "";
   return `<span class="rating" title="${esc(label)}"><span class="stars" role="img" aria-label="${esc(label)}" style="--pct:${Math.max(0, Math.min(100, score))}%"></span>` +
-         `<span class="score">${score}</span></span>`;
+         number + "</span>";
 }
 
 function priceBox(price, regular, pct) {

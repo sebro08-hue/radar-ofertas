@@ -19,66 +19,132 @@
     <span class="updated"></span>
   </div>
 </header>
+<div id="hero"></div>
 <main id="main"><p>Cargando…</p></main>
-<footer>Precios en USD. Cada precio enlaza a la tienda donde se obtuvo.</footer>
+<footer>Precios en USD. Cada oferta enlaza a la tienda donde se obtuvo; el precio final puede cambiar en la tienda.</footer>
 <script src="app.js"></script>
 <script type="module">
 const FORMATS = { digital: "Digital", physical: "Físico" };
+const SOURCES = { steam: "Steam", gog: "GOG", xbox: "Xbox Store", amazon: "Amazon", metacritic: "Metacritic",
+                  hltb: "How Long To Beat", igdb: "IGDB", steam_users: "Usuarios de Steam" };
+const STORE_COLORS = { Steam: "#4f8cff", GOG: "#a26bff", Xbox: "#22c55e", Amazon: "#f59e0b" };
+const shortDate = iso => new Date(iso).toLocaleDateString("es-CR", { day: "numeric", month: "short" });
+const hours = h => (h == null ? "—" : Math.round(h) + " h");
 
-function durationText(d) {
-  if (!d) return "—";
+function heroHtml(g, best) {
+  const low = g.historic_low ? `<span class="tag low">mínimo histórico</span>` : "";
+  const chips = g.platforms.map(p => `<span class="chip">${esc(p)}</span>`).join("");
+  const rating = g.rating == null ? "" : stars(g.rating, g.rating_source);
+  const stores = g.store_count === 1 ? "1 tienda" : g.store_count + " tiendas";
+  return `<section class="hero" style="--cover: url('${esc(g.image)}')">
+    <div class="hero-inner">
+      <a class="back" href="index.html">← Todas las ofertas</a>
+      <div class="hero-grid">
+        <div class="thumb" data-title="${esc(g.title)}"><img src="${esc(g.image)}" alt=""></div>
+        <div class="hero-info">
+          <h1>${esc(g.title)}</h1>
+          <div class="chips">${chips}</div>
+          <div class="hero-meta">${rating}<span>Lanzamiento: ${esc(g.release_date ?? "—")}</span></div>
+          <div class="buybox">
+            <div class="buy-label">Mejor precio hoy ${low}</div>
+            <div class="buy-row">${priceBox(g.best_price, g.regular, g.discount_pct)}
+              <a class="btn primary" href="${esc(best.url)}" target="_blank" rel="noopener">Ver en ${esc(g.best_store)} →</a></div>
+            <div class="meta">MSRP ${money(g.msrp)} · Comparado en ${stores}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function offerRow(o, bestPrice) {
+  const isBest = o.price === bestPrice;
+  const bestTag = isBest ? `<span class="tag low">mejor precio</span>` : "";
+  const chips = [o.platform, FORMATS[o.format] || o.format].filter(Boolean).map(x => `<span class="chip">${esc(x)}</span>`).join("");
+  const regular = o.regular && o.regular > o.price ? `<span class="regular">${money(o.regular, o.currency)}</span>` : "";
+  const color = STORE_COLORS[o.store] || "var(--muted)";
+  return `<li class="offer${isBest ? " best" : ""}">
+    <span class="store-dot" style="--c:${color}"></span>
+    <div class="offer-main"><div class="offer-name"><b>${esc(o.store)}</b>${bestTag}</div><div class="chips">${chips}</div></div>
+    <div class="offer-date meta">${shortDate(o.observed_at)}</div>
+    <div class="offer-price">${regular}<b>${money(o.price, o.currency)}</b></div>
+    <a class="btn small" href="${esc(o.url)}" target="_blank" rel="noopener">Ver oferta</a>
+  </li>`;
+}
+
+function durationHtml(d) {
+  if (!d) return `<p class="meta">Sin datos de duración.</p>`;
+  const tiles = [["Historia", d.main_h], ["Con extras", d.plus_h], ["Completista", d.comp_h]]
+    .map(([label, h]) => `<div class="tile"><b>${hours(h)}</b><span>${label}</span></div>`).join("");
   const source = d.source === "igdb" ? "IGDB" : "How Long To Beat";
-  return `Historia ${d.main_h ?? "—"} h · Con extras ${d.plus_h ?? "—"} h · Completista ${d.comp_h ?? "—"} h <span class="meta">(${source})</span>`;
+  return `<div class="tiles">${tiles}</div><p class="meta">Fuente: ${source}</p>`;
+}
+
+function ratingRow(r) {
+  const votes = r.votes ? r.votes.toLocaleString("es-CR") + " votos" : "";
+  return `<div class="score-row"><span class="big-score">${Math.round(r.score)}</span>
+    <div><div>${esc(SOURCES[r.source] || r.source)}</div>${stars(r.score, r.source, false)}<div class="meta">${votes}</div></div></div>`;
 }
 
 function ratingsHtml(ratings) {
-  if (!ratings.length) return "—";
-  const items = ratings.map(r =>
-    `<span>${stars(r.score, r.source)} <span class="source">${esc(SOURCE_NAMES[r.source] || r.source)}</span></span>`);
-  return `<div class="ratings">${items.join("")}</div>`;
+  return ratings.length ? ratings.map(ratingRow).join("") : `<p class="meta">Sin calificaciones.</p>`;
 }
 
 function staleHtml(statuses) {
   const stale = statuses.filter(s => !s.ok);
   if (!stale.length) return "";
-  const items = stale.map(s => esc(s.source) + " (último dato: " + (s.last_ok ? fmtDate(s.last_ok) : "nunca") + ")").join(", ");
-  return `<p><span class="tag stale">Fuentes sin actualizar: ${items}</span></p>`;
+  const items = stale.map(s => "<li>" + esc(SOURCES[s.source] || s.source) + ": último dato " +
+    (s.last_ok ? fmtDate(s.last_ok) : "nunca") + "</li>").join("");
+  return `<section class="panel warn"><h3>Fuentes sin actualizar</h3><ul>${items}</ul></section>`;
 }
 
-function offerRow(o) {
-  return `<tr><td><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.store)}</a></td>
-    <td><b>${money(o.price, o.currency)}</b></td><td>${o.regular ? money(o.regular, o.currency) : "—"}</td>
-    <td>${esc(FORMATS[o.format] || o.format)}</td><td>${esc(o.platform ?? "")}</td><td>${fmtDate(o.observed_at)}</td></tr>`;
+// Historial: el menor precio de cada tienda por día (una tienda puede tener varias ediciones).
+function historyChart(history) {
+  const days = [...new Set(history.map(h => h.observed_at.slice(0, 10)))].sort((a, b) => a.localeCompare(b));
+  const byStore = {};
+  for (const h of history) {
+    const day = h.observed_at.slice(0, 10), s = (byStore[h.store] ??= {});
+    s[day] = Math.min(s[day] ?? Infinity, h.price);
+  }
+  const css = getComputedStyle(document.documentElement);
+  const grid = css.getPropertyValue("--line").trim(), text = css.getPropertyValue("--muted").trim();
+  return new Chart(document.getElementById("hist"), {
+    type: "line",
+    data: {
+      labels: days.map(d => shortDate(d + "T12:00:00")),
+      datasets: Object.entries(byStore).map(([store, prices]) => ({
+        label: store, data: days.map(d => prices[d] ?? null), spanGaps: true, stepped: true,
+        borderColor: STORE_COLORS[store], backgroundColor: STORE_COLORS[store], borderWidth: 2, pointRadius: 3,
+      })),
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+      plugins: { legend: { position: "bottom", labels: { color: text, usePointStyle: true } },
+                 tooltip: { callbacks: { label: c => c.dataset.label + ": " + money(c.parsed.y) } } },
+      scales: { x: { grid: { color: grid }, ticks: { color: text } },
+                y: { grid: { color: grid }, ticks: { color: text, callback: v => "$" + v } } },
+    },
+  });
 }
 
 function render(g) {
   document.title = `${g.title} · Radar de Ofertas`;
-  const low = g.historic_low ? `<span class="tag low">mínimo histórico</span>` : "";
+  const offers = [...g.offers].sort((a, b) => a.price - b.price);
+  const rows = offers.map(o => offerRow(o, offers[0].price)).join("");
+  document.getElementById("hero").innerHTML = heroHtml(g, offers[0] || {});
   document.getElementById("main").innerHTML = `
-    <div class="detail">
-      <div class="thumb" data-title="${esc(g.title)}"><img src="${esc(g.image)}" alt=""></div>
-      <div class="facts">
-        <h2>${esc(g.title)}</h2>
-        <div class="chips">${g.platforms.map(p => `<span class="chip">${esc(p)}</span>`).join("")}</div>
-        <div class="best">${priceBox(g.best_price, g.regular, g.discount_pct)}<span>en <b>${esc(g.best_store)}</b></span>${low}</div>
-        <div class="meta">MSRP ${money(g.msrp)} · Lanzamiento: ${esc(g.release_date ?? "—")}</div>
-        <div>${ratingsHtml(g.ratings)}</div>
-        <div><b>Duración:</b> ${durationText(g.duration)}</div>
-        ${staleHtml(g.source_status)}
+    <div class="detail-grid">
+      <div>
+        <section class="panel"><h3>Precios por tienda</h3><ul class="offers">${rows}</ul></section>
+        <section class="panel"><h3>Historial de precios</h3><div class="chart-wrap"><canvas id="hist"></canvas></div></section>
       </div>
-    </div>
-    <h3>Precios por tienda</h3>
-    <div class="table-wrap"><table><thead><tr><th>Tienda</th><th>Precio</th><th>Regular</th><th>Formato</th><th>Plataforma</th><th>Obtenido</th></tr></thead><tbody>${g.offers.map(offerRow).join("")}</tbody></table></div>
-    <h3>Historial de precios</h3>
-    <div class="chart-box"><canvas id="hist" height="110"></canvas></div>`;
-
-  const byStore = {};
-  g.history.forEach(h => (byStore[h.store] ??= []).push({ x: h.observed_at, y: h.price }));
-  return new Chart(document.getElementById("hist"), {
-    type: "line",
-    data: { datasets: Object.entries(byStore).map(([store, pts]) => ({ label: store, data: pts, stepped: true })) },
-    options: { parsing: { xAxisKey: "x", yAxisKey: "y" }, scales: { x: { type: "category", labels: [...new Set(g.history.map(h => h.observed_at))] } } },
-  });
+      <aside>
+        <section class="panel"><h3>¿Cuánto dura?</h3>${durationHtml(g.duration)}</section>
+        <section class="panel"><h3>Calificaciones</h3>${ratingsHtml(g.ratings)}</section>
+        ${staleHtml(g.source_status)}
+      </aside>
+    </div>`;
+  return historyChart(g.history);
 }
 
 const id = new URLSearchParams(location.search).get("id");
