@@ -31,6 +31,7 @@ import argparse
 import contextlib
 import csv
 import json
+import multiprocessing
 import os
 import platform
 import shutil
@@ -88,18 +89,27 @@ def wait_port(host: str, port: int, timeout: float = 15) -> None:
     raise RuntimeError("el servidor replay no arrancó")
 
 
+def _serve(latency_ms: float, jitter_ms: float) -> None:
+    from radar.replay import ReplayServer
+    s = config.load()
+    r = s["replay"]
+    ReplayServer(s.path("replay_dir"), r["host"], r["port"], latency_ms, jitter_ms).serve_forever()
+
+
 @contextlib.contextmanager
 def replay_server(latency_ms: float, jitter_ms: float):
+    """Servidor replay en un PROCESO aparte: si viviera en este proceso, sus hilos
+    competirían por el GIL con los workers medidos."""
     r = config.load()["replay"]
-    proc = subprocess.Popen([sys.executable, "-m", "radar", "replay-server",
-                             "--latency-ms", str(latency_ms), "--jitter-ms", str(jitter_ms)],
-                            cwd=ROOT, stdout=subprocess.DEVNULL)
+    proc = multiprocessing.get_context("spawn").Process(
+        target=_serve, args=(float(latency_ms), float(jitter_ms)), daemon=True)
+    proc.start()
     try:
         wait_port(r["host"], r["port"])
         yield
     finally:
         proc.terminate()
-        proc.wait()
+        proc.join()
 
 
 # ---------------------------------------------------------------- ejecución
@@ -203,7 +213,7 @@ def stage_table(rows: list[dict]) -> list[dict]:
     return out
 
 
-def latency_table(rows: list[dict], a, logical: int) -> list[dict]:
+def latency_table(rows: list[dict], logical: int) -> list[dict]:
     """Tiempo por etapa del modo parallel (mismos workers) al variar la latencia simulada:
     muestra cuál etapa es el cuello de botella y cómo cambia."""
     same = [x for x in rows if x["sweep"] in ("latency", "jitter")
@@ -230,7 +240,7 @@ def build_summary(a, rows: list[dict], logical: int) -> dict:
                      for m in ["match", "total"]}
                 for ex in a.executors},
         "stages": stage_table(rows),
-        "latency": latency_table(rows, a, logical),
+        "latency": latency_table(rows, logical),
     }
     return summary
 
