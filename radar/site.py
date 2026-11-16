@@ -86,18 +86,18 @@ def _card(g, offers: list[dict], hist_min: float | None, ratings: list[dict], st
 
 
 VERSIONED_ASSETS = ("style.css", "app.js")
+PAGES = ("index.html", "game.html", "metrics.html")
 
 
 def _version_assets(dist: Path) -> None:
     """Agrega ?v=<hash del contenido> a style.css y app.js en cada página: cuando cambian,
     el navegador descarga la versión nueva en vez de usar la que tenía guardada."""
-    versions = {name: hashlib.sha1((dist / name).read_bytes()).hexdigest()[:10]
-                for name in VERSIONED_ASSETS if (dist / name).is_file()}
-    for page in dist.glob("*.html"):
-        html = page.read_text(encoding="utf-8")
-        for name, v in versions.items():
-            html = html.replace(f'"{name}"', f'"{name}?v={v}"')
-        page.write_text(html, encoding="utf-8")
+    versions = {name: hashlib.sha1((STATIC / name).read_bytes()).hexdigest()[:10] for name in VERSIONED_ASSETS}
+    for name in PAGES:
+        html = (STATIC / name).read_text(encoding="utf-8")
+        for asset, v in versions.items():
+            html = html.replace(f'"{asset}"', f'"{asset}?v={v}"')
+        (dist / name).write_text(html, encoding="utf-8")
 
 
 def build(conn, settings) -> Path:
