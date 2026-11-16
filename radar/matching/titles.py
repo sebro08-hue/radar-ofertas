@@ -45,9 +45,10 @@ def _key(title: str) -> str:
 def clean_store_title(title: str) -> str:
     """El nombre del juego tal como lo pone la tienda, sin plataforma, formato ni estado."""
     t = re.sub(r"[™®©]", "", title)
-    t = re.sub(r"\(.*?\)|\[.*?\]", " ", t)
+    t = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", t)
+    t = " ".join(t.split())                           # espacios simples: los cortes de abajo son exactos
     t = t.split(" | ")[0]
-    parts = re.split(r"\s+[-–—]\s+", t)
+    parts = re.split(r" [-–—] ", t)
     while len(parts) > 1 and _TRAILING_SEGMENT.search(parts[-1]):
         parts.pop()                                   # «… - PlayStation 4 Standard Edition»
     t = " - ".join(parts)
