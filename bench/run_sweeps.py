@@ -109,11 +109,23 @@ class Bench:
         self.run_db = source_db.with_name("bench-run.db")
         self.rows: list[dict] = []
 
+    def fresh_db(self) -> None:
+        """Copia nueva de la base. La base usa WAL: si quedara el -wal de la ejecución
+        anterior junto a la copia, SQLite lo aplicaría y la ejecución no partiría del
+        mismo estado."""
+        for suffix in ("", "-wal", "-shm"):
+            Path(f"{self.run_db}{suffix}").unlink(missing_ok=True)
+        shutil.copy(self.source_db, self.run_db)
+
     def one_run(self, overrides: dict) -> dict:
-        shutil.copy(self.source_db, self.run_db)          # mismo punto de partida en cada ejecución
+        self.fresh_db()                                    # mismo punto de partida en cada ejecución
         s = config.load(None, {"source": "replay", "capture": False, "db_path": str(self.run_db),
                                "rotation": {}, **overrides})
-        rep = Pipeline(s).run(with_discover=True, limit=self.a.limit, publish=False)
+        pipe = Pipeline(s)
+        try:
+            rep = pipe.run(with_discover=True, limit=self.a.limit, publish=False)
+        finally:
+            pipe.conn.close()
         return {"total": rep.total_s, **{k: rep.stage_times.get(k, 0.0) for k in STAGES},
                 "requests": rep.requests, "failures": rep.failures}
 
@@ -276,7 +288,8 @@ def main():
     summary = {"generated_at": stamp, **build_summary(a, b.rows, logical), "jitter_variant_ms": a.jitter_ms}
     (out_dir / f"summary-{stamp}.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (ROOT / "data" / "bench.json").write_text(json.dumps(summary), encoding="utf-8")
-    b.run_db.unlink(missing_ok=True)
+    for suffix in ("", "-wal", "-shm"):
+        Path(f"{b.run_db}{suffix}").unlink(missing_ok=True)
     print(f"\nlisto: bench/results/raw-{stamp}.csv, summary-{stamp}.json y data/bench.json")
 
 
