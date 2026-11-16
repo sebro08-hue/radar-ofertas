@@ -67,3 +67,23 @@ class CircuitBreakerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SteamImageTest(unittest.TestCase):
+    ROW = ('<a href="https://store.steampowered.com/app/{id}/x/?snr=1" data-ds-appid="{id}" class="search_result_row">'
+           '<div class="search_capsule"><img src="{img}"></div><span class="title">Juego {id}</span>'
+           '<div class="discount_block" data-price-final="1299"></div></a>')
+
+    def discover(self, rows):
+        from radar.scrapers.steam import SteamDiscover
+        body = json.dumps({"success": 1, "results_html": "".join(self.ROW.format(**r) for r in rows)})
+        res = SteamDiscover(1, 50).parse(None, Request("steam_discover", "https://store.steampowered.com/search/results/"), body)
+        return {g["steam_appid"]: g["image_url"] for g in res.games}
+
+    def test_hashed_assets_use_the_listing_image(self):
+        hashed = ("https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/3293260/"
+                  "8e79a5d7cc2b0d43ae06bfff19e2e00717dc6d76/capsule_231x87_alt_assets_5.jpg?t=1794602657")
+        classic = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1363080/capsule_231x87.jpg?t=1"
+        got = self.discover([{"id": 3293260, "img": hashed}, {"id": 1363080, "img": classic}])
+        self.assertEqual(got[3293260], hashed.split("?")[0])          # la del listado, sin parámetros
+        self.assertEqual(got[1363080], "https://cdn.akamai.steamstatic.com/steam/apps/1363080/header.jpg")

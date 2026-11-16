@@ -15,7 +15,7 @@ function card(c) {
                (c.stale_sources.length ? `<span class="tag stale" title="${esc(c.stale_sources.join(", "))}">datos desactualizados</span>` : "") +
                (c.store_count === 1 ? `<span class="tag single">solo en ${esc(c.best_store)}</span>` : "");
   return `<a class="card" href="game.html?id=${c.id}">
-    <img loading="lazy" src="${esc(c.image)}" alt="">
+    <div class="thumb" data-title="${esc(c.title)}"><img loading="lazy" src="${esc(c.image)}" alt=""></div>
     <div class="body">
       <h3>${esc(c.title)}</h3>
       <div><span class="price">${money(c.best_price)}</span>${reg}${pct}</div>
@@ -24,3 +24,8 @@ function card(c) {
       <div>${tags}</div>
     </div></a>`;
 }
+
+// Imagen que no carga (la tienda la movió o la borró): se oculta y el recuadro muestra el título.
+document.addEventListener("error", e => {
+  if (e.target instanceof HTMLImageElement) e.target.classList.add("broken");
+}, true);
