@@ -19,6 +19,7 @@
     <select id="platform"><option value="">Plataforma: todas</option></select>
     <select id="format"><option value="">Formato: todos</option><option value="digital">Digital</option><option value="physical">Físico</option></select>
     <select id="store"><option value="">Tienda: todas</option></select>
+    <select id="compare"><option value="">Comparación: todas</option><option value="multi">En 2 tiendas o más</option><option value="single">En una sola tienda</option></select>
     <select id="sort">
       <option value="discount">Mayor descuento</option>
       <option value="price">Mejor precio</option>
@@ -41,9 +42,10 @@ function fillSelect(sel, values) {
 
 function filtered() {
   const q = $("q").value.toLowerCase(), k = $("kind").value, p = $("platform").value,
-        f = $("format").value, s = $("store").value, sort = $("sort").value;
+        f = $("format").value, s = $("store").value, cmpMode = $("compare").value, sort = $("sort").value;
   const list = all.filter(c => (!q || c.title.toLowerCase().includes(q)) && (!k || c.kind === k) &&
-    (!p || c.platforms.includes(p)) && (!f || c.formats.includes(f)) && (!s || c.stores.includes(s)));
+    (!p || c.platforms.includes(p)) && (!f || c.formats.includes(f)) && (!s || c.stores.includes(s)) &&
+    (!cmpMode || (cmpMode === "multi") === (c.store_count > 1)));
   const cmp = {
     discount: (a, b) => b.discount_pct - a.discount_pct,
     price: (a, b) => a.best_price - b.best_price,
@@ -67,7 +69,7 @@ fetch("data/cards.json").then(r => r.json()).then(d => {
   fillSelect($("store"), all.flatMap(c => c.stores));
   render();
 });
-["q", "kind", "platform", "format", "store", "sort"].forEach(id => $(id).addEventListener("input", () => { page = 0; render(); }));
+["q", "kind", "platform", "format", "store", "compare", "sort"].forEach(id => $(id).addEventListener("input", () => { page = 0; render(); }));
 $("prev").onclick = () => { page = Math.max(0, page - 1); render(); };
 $("next").onclick = () => { page++; render(); };
 </script>

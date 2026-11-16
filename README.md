@@ -13,6 +13,7 @@ Comparador de precios de videojuegos. Revisa varias tiendas todos los días, emp
 - Empareja títulos entre tiendas ("Zelda BOTW" vs. "The Legend of Zelda: Breath of the Wild – Nintendo Switch") con un algoritmo propio de similitud.
 - Guarda cada precio observado, sin sobrescribir, para mostrar el historial y marcar mínimos históricos.
 - Si una fuente falla, publica lo que tiene y avisa qué dato está desactualizado.
+- Publica todo juego con al menos un precio vigente (confirmado por su tienda en los últimos 14 días); los que solo están en una tienda llevan la etiqueta «solo en …» y se pueden filtrar.
 - Se actualiza solo todos los días con GitHub Actions y se publica en GitHub Pages.
 
 ## Cómo funciona
