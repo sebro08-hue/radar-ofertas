@@ -54,6 +54,36 @@ def _latest_by(conn, table: str, cols: str) -> dict[int, list[dict]]:
     return out
 
 
+RATING_PRIORITY = ("metacritic", "steam_users")    # la que muestra la tarjeta
+
+
+def _rating(rows: list[dict]) -> tuple[float | None, str | None]:
+    """(puntaje, fuente) de la calificación preferida."""
+    by_source = {r["source"]: r["score"] for r in rows}
+    for source in RATING_PRIORITY:
+        if by_source.get(source):
+            return by_source[source], source
+    return None, None
+
+
+def _card(g, offers: list[dict], hist_min: float | None, ratings: list[dict], status: list[dict]) -> dict:
+    best = min(offers, key=lambda o: o["price"])
+    regular = best["regular"] or g["msrp"]
+    discount = round(100 * (1 - best["price"] / regular)) if regular and regular > best["price"] else 0
+    rating, rating_source = _rating(ratings)
+    stores = sorted({o["store"] for o in offers})
+    return {
+        "id": g["id"], "title": g["canonical_title"], "image": g["image_url"],
+        "platforms": json.loads(g["platforms"]), "kind": g["kind"],
+        "formats": sorted({o["format"] for o in offers}), "stores": stores, "store_count": len(stores),
+        "best_price": best["price"], "best_store": best["store"], "regular": regular,
+        "discount_pct": discount, "on_sale": discount > 0,
+        "historic_low": best["price"] <= (hist_min if hist_min is not None else best["price"]),
+        "rating": rating, "rating_source": rating_source,
+        "stale_sources": [s["source"] for s in status if not s["ok"]],
+    }
+
+
 def build(conn, settings) -> Path:
     dist: Path = settings.path("site_dir")
     data_dir = dist / "data"
@@ -77,22 +107,7 @@ def build(conn, settings) -> Path:
         offers = [o for o in prices.get(gid, []) if o["currency"] == "USD"]
         if not offers:               # sin ningún precio en USD no hay nada que mostrar
             continue
-        best = min(offers, key=lambda o: o["price"])
-        regular = best["regular"] or g["msrp"]
-        discount = round(100 * (1 - best["price"] / regular)) if regular and regular > best["price"] else 0
-        rts = {r["source"]: r["score"] for r in ratings.get(gid, [])}
-        stale = [s["source"] for s in status.get(gid, []) if not s["ok"]]
-        card = {
-            "id": gid, "title": g["canonical_title"], "image": g["image_url"],
-            "platforms": json.loads(g["platforms"]), "kind": g["kind"],
-            "formats": sorted({o["format"] for o in offers}), "stores": sorted({o["store"] for o in offers}),
-            "store_count": len({o["store"] for o in offers}),
-            "best_price": best["price"], "best_store": best["store"], "regular": regular,
-            "discount_pct": discount, "on_sale": discount > 0,
-            "historic_low": best["price"] <= hist_min.get(gid, best["price"]),
-            "rating": rts.get("metacritic") or rts.get("steam_users"),
-            "stale_sources": stale,
-        }
+        card = _card(g, offers, hist_min.get(gid), ratings.get(gid, []), status.get(gid, []))
         cards.append(card)
 
         history = [dict(r) for r in conn.execute(
