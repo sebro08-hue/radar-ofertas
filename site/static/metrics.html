@@ -26,8 +26,19 @@
   <div class="table-wrap"><table id="stages"></table></div>
   <h3>Solicitudes por sitio</h3>
   <div class="table-wrap"><table id="requests"></table></div>
-  <h3>Juegos sin emparejar o con emparejamiento dudoso</h3>
-  <div class="table-wrap"><table id="flags"></table></div>
+  <h3>Emparejamiento: casos sin emparejar o dudosos</h3>
+  <p class="meta">Cuando el sistema no puede decidir con seguridad si un producto de una tienda es el mismo juego del catálogo, lo marca aquí. Umbral de aceptación: 0,84.</p>
+  <div class="flag-tiles" id="flag-tiles"></div>
+  <div class="table-wrap"><table id="flag-stores"><thead><tr><th>Tienda</th></tr></thead><tbody></tbody></table></div>
+  <div class="toolbar flag-filters">
+    <label class="control">Motivo <select id="flag-reason"></select></label>
+    <label class="control">Tienda <select id="flag-store"><option value="">Todas</option></select></label>
+    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="flag-q" type="search" placeholder="Buscar juego o candidato" aria-label="Buscar juego o candidato"></div>
+  </div>
+  <p class="result-count" id="flag-count"></p>
+  <div class="table-wrap"><table id="flags"><thead><tr><th>Juego</th></tr></thead><tbody></tbody></table></div>
+  <div class="pager"><button id="flag-more" type="button">Mostrar más</button></div>
   <h3 id="hard-title">Casos difíciles del catálogo</h3>
   <div class="table-wrap"><table id="hard"><thead><tr><th>Juego</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
   <h3>Cola de fallidos</h3>
@@ -59,6 +70,58 @@
 const $ = id => document.getElementById(id);
 const table = (el, head, rows) => { el.innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${head.length}">—</td></tr>`}</tbody>`; };
 
+// ---------------------------------------------------------------- emparejamiento
+const REASONS = {
+  near_threshold: ["Cerca del umbral", "El puntaje quedó cerca de 0,84: puede ser el mismo juego o no."],
+  edition: ["Edición especial", "Se aceptó, pero es otra edición: el precio puede no ser comparable."],
+  dlc_or_bundle: ["DLC o paquete", "El resultado parece un extra (DLC, banda sonora, paquete), no el juego."],
+  unmatched: ["Sin emparejar", "La tienda respondió, pero ningún resultado se parece lo suficiente (suele ser que no lo vende)."],
+};
+const DOUBTFUL = ["near_threshold", "edition", "dlc_or_bundle"];
+const FLAG_PAGE = 50;
+let flagRows = [], flagShown = FLAG_PAGE;
+
+function reasonLabel(r) { return (REASONS[r] || [r])[0]; }
+
+function renderFlagSummary(flags) {
+  const count = r => flags.filter(f => f.reason === r).length;
+  $("flag-tiles").innerHTML = Object.entries(REASONS).map(([r, [label, help]]) =>
+    `<div class="stat flag-${r}" title="${esc(help)}">${label}<b>${count(r)}</b><span class="meta">${esc(help)}</span></div>`).join("");
+  const stores = [...new Set(flags.map(f => f.store))].sort((a, b) => a.localeCompare(b));
+  const reasons = Object.keys(REASONS);
+  const rows = stores.map(s => [s, ...reasons.map(r => flags.filter(f => f.store === s && f.reason === r).length)]);
+  table($("flag-stores"), ["Tienda", ...reasons.map(reasonLabel)], rows);
+  stores.forEach(st => $("flag-store").insertAdjacentHTML("beforeend", `<option>${esc(st)}</option>`));
+  const opts = [["doubtful", "Dudosos (sin «sin emparejar»)"], ...Object.entries(REASONS).map(([r, [label]]) => [r, label]), ["", "Todos"]];
+  $("flag-reason").innerHTML = opts.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join("");
+}
+
+function filteredFlags() {
+  const reason = $("flag-reason").value, store = $("flag-store").value, q = $("flag-q").value.trim().toLowerCase();
+  const okReason = f => !reason || (reason === "doubtful" ? DOUBTFUL.includes(f.reason) : f.reason === reason);
+  const okText = f => !q || (f.game + " " + (f.candidate || "")).toLowerCase().includes(q);
+  // lo más dudoso primero: más cerca del umbral
+  return flagRows.filter(f => okReason(f) && (!store || f.store === store) && okText(f))
+    .sort((a, b) => Math.abs((a.score ?? 0) - 0.84) - Math.abs((b.score ?? 0) - 0.84));
+}
+
+function drawFlags() {
+  const list = filteredFlags();
+  const rows = list.slice(0, flagShown).map(f =>
+    [f.game, f.store, f.candidate || "—", f.score ? f.score.toFixed(3) : "—", reasonLabel(f.reason)]);
+  table($("flags"), ["Juego", "Tienda", "Candidato de la tienda", "Puntaje", "Motivo"], rows);
+  $("flag-count").textContent = `${list.length} casos` + (list.length > flagShown ? ` · mostrando ${flagShown}` : "");
+  $("flag-more").hidden = list.length <= flagShown;
+}
+
+function renderFlags(flags) {
+  flagRows = flags;
+  renderFlagSummary(flags);
+  drawFlags();
+  ["flag-reason", "flag-store", "flag-q"].forEach(id => $(id).addEventListener("input", () => { flagShown = FLAG_PAGE; drawFlags(); }));
+  $("flag-more").addEventListener("click", () => { flagShown += FLAG_PAGE; drawFlags(); });
+}
+
 async function loadJson(url) {
   const r = await fetch(url);
   return r.ok ? r.json() : null;
@@ -71,7 +134,7 @@ function renderRun(m) {
     ["Modo", run.mode ?? "—"], ["Fuente", run.source ?? "—"]].map(([k, v]) => `<div class="stat">${k}<b>${esc(v)}</b></div>`).join("");
   table($("stages"), ["Etapa", "Segundos"], Object.entries(st).map(([k, v]) => [k, v.toFixed(3)]));
   table($("requests"), ["Dominio", "Exitosas", "Reintentadas", "Fallidas"], m.requests.map(r => [r.domain, r.ok, r.retried, r.failed]));
-  table($("flags"), ["Juego", "Tienda", "Candidato", "Puntaje", "Motivo"], m.flags.map(f => [f.game, f.store, f.candidate, f.score, f.reason]));
+  renderFlags(m.flags);
   const hard = m.hard_cases || [];
   $("hard-title").textContent = `Casos difíciles del catálogo (${hard.length})`;
   table($("hard"), ["Juego", "Motivo"], hard.map(h => [h.game, h.reason ?? "marcado a mano"]));
