@@ -442,7 +442,9 @@ class Pipeline:
 
         t = time.perf_counter()
         rep.matched_offers, rep.flags = self._aggregate(run_id, games, col, matches, failures)
+        with_alts = db.update_titles_and_kinds(self.conn)
         st["aggregate"] = time.perf_counter() - t
+        print(f"  [títulos] {with_alts} juegos con títulos alternativos")
 
         rep.failures = sum(1 for f in failures if not f.recovered)
         rep.recovered = sum(1 for f in failures if f.recovered)

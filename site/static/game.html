@@ -31,6 +31,11 @@ const STORE_COLORS = { Steam: "#4f8cff", GOG: "#a26bff", Xbox: "#22c55e", Amazon
 const shortDate = iso => new Date(iso).toLocaleDateString("es-CR", { day: "numeric", month: "short" });
 const hours = h => (h == null ? "—" : Math.round(h) + " h");
 
+function alsoKnown(titles) {
+  if (!titles || !titles.length) return "";
+  return `<div class="aka">También conocido como: ${titles.map(esc).join(" · ")}</div>`;
+}
+
 function heroHtml(g, best) {
   const low = g.historic_low ? `<span class="tag low">mínimo histórico</span>` : "";
   const chips = g.platforms.map(p => `<span class="chip">${esc(p)}</span>`).join("");
@@ -43,7 +48,8 @@ function heroHtml(g, best) {
         <div class="thumb" data-title="${esc(g.title)}"><img src="${esc(g.image)}" alt=""></div>
         <div class="hero-info">
           <h1>${esc(g.title)}</h1>
-          <div class="chips">${chips}</div>
+          ${alsoKnown(g.alt_titles)}
+          <div class="chips">${chips}${g.kind === "game+dlc" ? '<span class="chip">Incluye DLC</span>' : ""}</div>
           <div class="hero-meta">${rating}<span>Lanzamiento: ${esc(g.release_date ?? "—")}</span></div>
           <div class="buybox">
             <div class="buy-label">Mejor precio hoy ${low}</div>

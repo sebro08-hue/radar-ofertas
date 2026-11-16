@@ -75,7 +75,7 @@ def _card(g, offers: list[dict], hist_min: float | None, ratings: list[dict], st
     stores = sorted({o["store"] for o in offers})
     return {
         "id": g["id"], "title": g["canonical_title"], "image": g["image_url"],
-        "platforms": json.loads(g["platforms"]), "kind": g["kind"],
+        "platforms": json.loads(g["platforms"]), "kind": g["kind"], "alt_titles": json.loads(g["alt_titles"] or "[]"),
         "formats": sorted({o["format"] for o in offers}), "stores": stores, "store_count": len(stores),
         "best_price": best["price"], "best_store": best["store"], "regular": regular,
         "discount_pct": discount, "on_sale": discount > 0,

@@ -72,6 +72,11 @@ python -m radar games remove 42
 python -m radar games import juegos.csv
 ```
 
+Cada corrida completa dos datos del catálogo:
+
+- **Títulos alternativos:** los nombres con que las otras tiendas venden el mismo juego («Helldivers II» para «HELLDIVERS™ 2», «Fallout 3» para «Fallout 3: Game of the Year Edition»), limpios de plataforma, formato y estado. Solo salen de ofertas aceptadas con puntaje de 0,90 o más; se descartan las ediciones del mismo juego y los nombres que corresponden a más de un juego del catálogo. Se usan al emparejar y en la búsqueda del sitio. Los que se agregan a mano con `--alt` se conservan.
+- **Tipo:** «juego + DLC» para las ediciones que incluyen contenido extra (Game of the Year, Complete, Definitive, Director's Cut, colecciones…); el resto, «juego».
+
 ### Modo replay
 
 En modo `live`, cada respuesta se guarda en `data/replay/`. El modo `replay` sirve esas mismas respuestas desde un servidor local con latencia configurable. Así se puede trabajar sin internet, depurar parsers o medir rendimiento con resultados repetibles.

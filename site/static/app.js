@@ -28,7 +28,8 @@ function priceBox(price, regular, pct) {
 function card(c) {
   const tags = (c.historic_low ? `<span class="tag low">mínimo histórico</span>` : "") +
                (c.stale_sources.length ? `<span class="tag stale" title="${esc(c.stale_sources.join(", "))}">datos desactualizados</span>` : "") +
-               (c.store_count === 1 ? `<span class="tag single">solo en ${esc(c.best_store)}</span>` : "");
+               (c.store_count === 1 ? `<span class="tag single">solo en ${esc(c.best_store)}</span>` : "") +
+               (c.kind === "game+dlc" ? `<span class="tag dlc">incluye DLC</span>` : "");
   const where = c.store_count > 1 ? `Mejor precio en ${esc(c.best_store)} · ${c.store_count} tiendas` : esc(c.best_store);
   return `<a class="card" href="game.html?id=${c.id}">
     <div class="thumb" data-title="${esc(c.title)}"><img loading="lazy" src="${esc(c.image)}" alt=""></div>
