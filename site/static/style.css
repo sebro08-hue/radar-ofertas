@@ -16,7 +16,7 @@ button, select, input { font: inherit; color: inherit; }
 .topbar { position: sticky; top: 0; z-index: 10; background: var(--bar); color: var(--bar-text); box-shadow: 0 1px 0 rgba(255, 255, 255, .06); }
 .topbar-inner { max-width: 1200px; margin: 0 auto; padding: 0 16px; height: 60px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--bar-text); font-weight: 700; font-size: 17px; letter-spacing: .2px; justify-self: start; }
-.brand svg { width: 28px; height: 28px; flex: none; }
+.brand img { width: 28px; height: 28px; flex: none; }
 .mainnav { display: flex; gap: 4px; justify-self: center; }
 .mainnav a { color: var(--bar-muted); font-weight: 600; font-size: 14px; letter-spacing: .4px; text-transform: uppercase; padding: 19px 14px 17px;
   border-bottom: 3px solid transparent; transition: color .15s, border-color .15s; }
