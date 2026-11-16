@@ -112,14 +112,18 @@ function historyChart(history) {
     type: "line",
     data: {
       labels: days.map(d => shortDate(d + "T12:00:00")),
-      datasets: Object.entries(byStore).map(([store, prices]) => ({
-        label: store, data: days.map(d => prices[d] ?? null), spanGaps: true, stepped: true,
-        borderColor: STORE_COLORS[store], backgroundColor: STORE_COLORS[store], borderWidth: 2, pointRadius: 3,
+      // Dos tiendas con el mismo precio dibujarían una línea encima de la otra: cada línea
+      // es más delgada que la anterior y se dibuja encima (en Chart.js, menor `order` = encima),
+      // así se ve como una línea doble con los dos colores.
+      datasets: Object.entries(byStore).map(([store, prices], i) => ({
+        label: store, data: days.map(d => prices[d] ?? null), spanGaps: true, stepped: true, order: -i,
+        borderColor: STORE_COLORS[store], backgroundColor: STORE_COLORS[store],
+        borderWidth: Math.max(2, 9 - 2.3 * i), pointRadius: Math.max(2.5, 6 - 1.2 * i), pointHoverRadius: 7,
       })),
     },
     options: {
       maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
-      plugins: { legend: { position: "bottom", labels: { color: text, usePointStyle: true } },
+      plugins: { legend: { position: "bottom", reverse: true, labels: { color: text, usePointStyle: true } },
                  tooltip: { callbacks: { label: c => c.dataset.label + ": " + money(c.parsed.y) } } },
       scales: { x: { grid: { color: grid }, ticks: { color: text } },
                 y: { grid: { color: grid }, ticks: { color: text, callback: v => "$" + v } } },
