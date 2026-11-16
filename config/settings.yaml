@@ -71,7 +71,8 @@ per_domain_interval_s:
 # por día, Amazon recorre un catálogo de 600 cada 6 días.
 rotation:
   amazon: 100
-  xbox: 150          # cada página de producto pesa ~900 KB
+  # Xbox no rota: los ~360 juegos enlazados se consultan en cada corrida (unas 360
+  # páginas de ~900 KB, con 1 s entre solicitudes; la captura completa lo hizo sin bloqueos).
 
 # Etapa 0: descubrimiento del catálogo (Steam Top Sellers, paginado).
 discover:
