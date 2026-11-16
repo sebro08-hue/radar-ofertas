@@ -26,6 +26,20 @@ RELEASED = re.compile(r'class="search_released[^"]*">\s*([^<]*?)\s*</div>', re.S
 FINAL = re.compile(r'data-price-final="(\d+)"')
 ORIGINAL = re.compile(r'class="discount_original_price">([^<]*)<')
 REVIEW = re.compile(r'(\d+)% of the ([\d,]+) user reviews')
+IMG = re.compile(r'<img src="([^"]+)"')
+# Steam publica las imágenes de los juegos recientes en una carpeta con un hash
+# (".../apps/<appid>/<hash de 40>/capsule_231x87.jpg") y ya no en la dirección
+# clásica ".../apps/<appid>/header.jpg", que para ellos responde 404.
+HASHED_ASSET = re.compile(r"/apps/\d+/[0-9a-f]{40}/")
+CLASSIC_HEADER = "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg"
+
+
+def image_url(appid: int, listing_img: str | None) -> str:
+    """La imagen del encabezado clásico si existe; si Steam ya la movió a una carpeta
+    con hash, la que el propio listado muestra (más pequeña, pero segura)."""
+    if listing_img and HASHED_ASSET.search(listing_img):
+        return listing_img.split("?")[0]
+    return CLASSIC_HEADER.format(appid=appid)
 
 
 def _rows(body: str):
@@ -42,6 +56,7 @@ def _rows(body: str):
         orig = ORIGINAL.search(block)
         rel = RELEASED.search(inner)
         rev = REVIEW.search(block)
+        img = IMG.search(inner)
         yield {
             "url": url.split("?")[0],
             "kind": kind,
@@ -52,6 +67,7 @@ def _rows(body: str):
             "released": rel.group(1).strip() if rel else None,
             "review_pct": int(rev.group(1)) if rev else None,
             "review_votes": int(rev.group(2).replace(",", "")) if rev else None,
+            "image": img.group(1) if img else None,
         }
 
 
@@ -86,7 +102,7 @@ class SteamDiscover(Scraper):
                 "release_date": r["released"],
                 "msrp": r["regular"] or r["price"],
                 "platforms": ["PC"],
-                "image_url": f"https://cdn.akamai.steamstatic.com/steam/apps/{r['appid']}/header.jpg",
+                "image_url": image_url(r["appid"], r["image"]),
                 "origin": "discover",
             })
         return res

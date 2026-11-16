@@ -31,7 +31,7 @@ fetch(`data/games/${encodeURIComponent(id)}.json`).then(r => r.json()).then(g =>
   const staleNote = stale.size ? `<p class="tag stale">Fuentes sin actualizar: ${[...stale].map(([s, t]) => `${esc(s)} (último dato: ${t ? fmtDate(t) : "nunca"})`).join(", ")}</p>` : "";
   document.getElementById("main").innerHTML = `
     <div class="detail">
-      <img src="${esc(g.image)}" alt="">
+      <div class="thumb" data-title="${esc(g.title)}"><img src="${esc(g.image)}" alt=""></div>
       <div>
         <h2>${esc(g.title)}</h2>
         <p class="meta">${esc(g.platforms.join(", "))} · Lanzamiento: ${esc(g.release_date ?? "—")}</p>
