@@ -25,9 +25,9 @@
 <script src="app.js"></script>
 <script type="module">
 const FORMATS = { digital: "Digital", physical: "Físico" };
-const SOURCES = { steam: "Steam", gog: "GOG", xbox: "Xbox Store", amazon: "Amazon", metacritic: "Metacritic",
+const SOURCES = { steam: "Steam", gog: "GOG", xbox: "Xbox Store", playstation: "PlayStation Store", amazon: "Amazon", metacritic: "Metacritic",
                   hltb: "How Long To Beat", igdb: "IGDB", steam_users: "Usuarios de Steam" };
-const STORE_COLORS = { Steam: "#4f8cff", GOG: "#a26bff", Xbox: "#22c55e", Amazon: "#f59e0b" };
+const STORE_COLORS = { Steam: "#4f8cff", GOG: "#a26bff", Xbox: "#22c55e", PlayStation: "#ec4899", Amazon: "#f59e0b" };
 const shortDate = iso => new Date(iso).toLocaleDateString("es-CR", { day: "numeric", month: "short" });
 const hours = h => (h == null ? "—" : Math.round(h) + " h");
 

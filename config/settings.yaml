@@ -61,6 +61,7 @@ per_domain_limit:
   www.metacritic.com: 2
   howlongtobeat.com: 2
   www.xbox.com: 2
+  www.playstation.com: 2
   127.0.0.1: 64
 
 # Pausa mínima (segundos) entre el inicio de dos solicitudes al mismo dominio.
@@ -68,6 +69,7 @@ per_domain_limit:
 per_domain_interval_s:
   www.amazon.com: 4
   www.xbox.com: 1
+  www.playstation.com: 1
   api.igdb.com: 0.3       # límite de la API: 4 solicitudes por segundo
 
 # Rotación: fuentes que no se consultan para todo el catálogo en cada ejecución,
@@ -92,4 +94,4 @@ matching:
 
 # Fuentes activas (ver radar/scrapers/__init__.py).
 # igdb: duración de respaldo para juegos sin hltb_id (requiere IGDB_CLIENT_ID / IGDB_CLIENT_SECRET).
-sources: [steam, gog, xbox, amazon, metacritic, hltb, igdb]
+sources: [steam, gog, xbox, playstation, amazon, metacritic, hltb, igdb]
