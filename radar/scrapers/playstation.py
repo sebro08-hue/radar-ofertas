@@ -22,8 +22,8 @@ from .xbox import build_index
 SITEMAP = "https://www.playstation.com/en-us/sitemap.xml"
 STORE_PRODUCT = "https://store.playstation.com/en-us/product/{sku}"
 GAME_LOC = re.compile(r"<loc>(https://www\.playstation\.com/en-us/games/([a-z0-9-]+)/)</loc>", re.I)
-LD_JSON = re.compile(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', re.S)
-APP_JSON = re.compile(r'<script[^>]*type="application/json"[^>]*>(.*?)</script>', re.S)
+LD_JSON = 'type="application/ld+json"'
+APP_JSON = 'type="application/json"'
 
 
 # ---------------------------------------------------------------- enlace por sitemap
@@ -54,10 +54,23 @@ def build_ps_index(xml: str) -> dict[str, str]:
 
 # ---------------------------------------------------------------- página del juego
 
-def _json_blocks(pattern: re.Pattern, body: str):
-    for m in pattern.finditer(body):
+def _scripts(body: str, type_attr: str):
+    """Contenido de cada <script ...> cuyo tag tiene type_attr (búsqueda lineal, sin regex)."""
+    pos = 0
+    while (start := body.find("<script", pos)) >= 0:
+        tag_end = body.find(">", start)
+        close = body.find("</script>", tag_end)
+        if tag_end < 0 or close < 0:
+            return
+        if type_attr in body[start:tag_end]:
+            yield body[tag_end + 1:close]
+        pos = close + len("</script>")
+
+
+def _json_blocks(type_attr: str, body: str):
+    for text in _scripts(body, type_attr):
         try:
-            yield json.loads(m.group(1))
+            yield json.loads(text)
         except ValueError:
             continue
 
