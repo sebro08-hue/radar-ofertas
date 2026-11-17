@@ -44,6 +44,10 @@ workers:
 # executor del emparejamiento en modo parallel: process | thread
 match_executor: process
 
+# Mecanismo de la descarga en modos concurrent/parallel: thread (ThreadPoolExecutor) | asyncio
+# (un solo hilo con bucle de eventos; solo en modo replay, ver radar/async_fetch.py).
+fetch_mechanism: thread
+
 # Tamaño de las colas acotadas entre etapas.
 queues:
   fetched: 256

@@ -165,7 +165,7 @@ def _metrics(conn, data_dir: Path, last_run) -> None:
         "SELECT canonical_title AS game, hard_reason AS reason FROM games "
         "WHERE active=1 AND hard_case=1 ORDER BY canonical_title")]
     # Resultados de los benchmarks (bench/run_sweeps.py y bench/contention.py), si existen.
-    for name in ("bench.json", "contention.json"):
+    for name in ("bench.json", "contention.json", "mechanisms.json"):
         src = ROOT / "data" / name
         if src.is_file():
             shutil.copy(src, data_dir / name)

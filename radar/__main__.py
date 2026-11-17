@@ -26,6 +26,7 @@ def _settings(a) -> config.Settings:
         "workers.fetch": getattr(a, "fetch_workers", None),
         "workers.match": getattr(a, "match_workers", None),
         "match_executor": getattr(a, "match_executor", None),
+        "fetch_mechanism": getattr(a, "fetch_mechanism", None),
         "replay.latency_ms": getattr(a, "latency_ms", None),
         "replay.jitter_ms": getattr(a, "jitter_ms", None),
         "db_path": getattr(a, "db", None),
@@ -171,6 +172,7 @@ def main(argv=None):
     p.add_argument("--fetch-workers", type=int)
     p.add_argument("--match-workers", type=int)
     p.add_argument("--match-executor", choices=["process", "thread"])
+    p.add_argument("--fetch-mechanism", choices=["thread", "asyncio"], help="asyncio: solo en modo replay")
     p.add_argument("--latency-ms", type=float)
     p.add_argument("--jitter-ms", type=float)
     p.add_argument("--limit", type=int, help="procesar solo los primeros N juegos")
