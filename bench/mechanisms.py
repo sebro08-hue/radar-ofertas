@@ -18,6 +18,7 @@ import argparse
 import csv
 import json
 import resource
+import shutil
 import statistics
 import sys
 import time
@@ -43,7 +44,7 @@ def cpu_seconds() -> float:
 def fresh_db(source: Path, run_db: Path) -> None:
     for suffix in ("", "-wal", "-shm"):
         Path(f"{run_db}{suffix}").unlink(missing_ok=True)
-    run_db.write_bytes(source.read_bytes())
+    shutil.copyfile(source, run_db)
 
 
 def one_run(source_db: Path, run_db: Path, mechanism: str, workers: int, latency_ms: float) -> dict:

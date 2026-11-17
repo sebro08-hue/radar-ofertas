@@ -69,7 +69,7 @@ class AsyncReplayFetcher:
                     if i < len(urls) - 1 and exc.reason in NOT_FOUND:
                         continue
                     return job, None, exc
-                except (OSError, asyncio.TimeoutError) as exc:
+                except OSError as exc:            # incluye TimeoutError (asyncio.wait_for)
                     return job, None, FetchError(url, f"red: {exc!r}", retryable=True)
                 if i:
                     job.req = replace(job.req, url=url, alternates=())
