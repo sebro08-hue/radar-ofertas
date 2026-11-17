@@ -24,6 +24,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 
 from . import db, igdb, scrapers
+from .async_fetch import AsyncReplayFetcher
 from .http_client import FetchError, HttpClient
 from .matching import MatchTask, match_game, set_catalog
 from .scrapers import xbox
@@ -224,6 +225,9 @@ class Pipeline:
                     failures.append(Failure(job, f"parse: {exc!r}", False))
             return results, failures
 
+        if self._use_asyncio():
+            return self._fetch_and_parse_async(jobs, n_workers)
+
         # concurrent / parallel: workers de E/S -> cola acotada -> parser (hilo principal)
         fetched: queue.Queue = queue.Queue(maxsize=self.s["queues"]["fetched"])
         DONE = object()
@@ -253,6 +257,35 @@ class Pipeline:
                 results.append(self._parse_one(job, body))
             except Exception as e:
                 failures.append(Failure(job, f"parse: {e!r}", False))
+        return results, failures
+
+    def _use_asyncio(self) -> bool:
+        """fetch_mechanism: asyncio en lugar de hilos (solo en modo replay; ver async_fetch.py)."""
+        if self.s.get("fetch_mechanism", "thread") != "asyncio":
+            return False
+        if self.s["source"] != "replay":
+            if not getattr(self, "_warned_asyncio", False):
+                print("  [asyncio] solo disponible en modo replay; se descarga con hilos")
+                self._warned_asyncio = True
+            return False
+        return True
+
+    def _fetch_and_parse_async(self, jobs: list[FetchJob], n_workers: int):
+        """La misma etapa con asyncio: n_workers descargas en vuelo en un solo hilo, y el
+        parser corre en ese hilo a medida que terminan (igual que el consumidor de la cola)."""
+        results: list[ParseResult] = []
+        failures: list[Failure] = []
+
+        def on_result(job: FetchJob, body: str | None, exc: FetchError | None) -> None:
+            if exc is not None:
+                failures.append(Failure(job, exc.reason, exc.retryable))
+                return
+            try:
+                results.append(self._parse_one(job, body))
+            except Exception as e:
+                failures.append(Failure(job, f"parse: {e!r}", False))
+
+        AsyncReplayFetcher(self.http, self.s, n_workers).fetch_all(jobs, on_result)
         return results, failures
 
     def _retry_failed(self, failures: list[Failure]) -> list[ParseResult]:

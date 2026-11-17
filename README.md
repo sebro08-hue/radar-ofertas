@@ -94,6 +94,7 @@ Se miden en modo replay, sobre una captura completa: descargar el artefacto del 
 ```bash
 python bench/run_sweeps.py          # barridos de workers y de latencia: speedup, eficiencia, Karp–Flatt, Amdahl
 python bench/contention.py          # estrategias de agregación entre hilos (lock, estado local, cola) y la condición de carrera
+python bench/mechanisms.py          # la descarga con hilos frente a asyncio
 ```
 
 `run_sweeps.py` mide cada etapa y el pipeline completo en los tres modos, con 5 repeticiones por configuración (mediana, mínimo, máximo y desviación). Cada ejecución parte de una copia nueva de `data/bench.db`, así que todas comparan exactamente el mismo trabajo. Barre:
@@ -102,7 +103,9 @@ python bench/contention.py          # estrategias de agregación entre hilos (lo
 - workers de emparejamiento: 1, 2, 4… hasta los núcleos lógicos y el doble, con `ProcessPoolExecutor` y con `ThreadPoolExecutor` (modo `parallel`);
 - latencia simulada: 0, 50, 150 y 300 ms, y 150 ± 50 ms.
 
-Las filas crudas y el resumen quedan en `bench/results/`. Los resúmenes `data/bench.json` y `data/contention.json` se publican en la página de métricas del sitio.
+La descarga tiene dos mecanismos que se eligen con `fetch_mechanism` (o `run --fetch-mechanism`): `thread`, con un `ThreadPoolExecutor`, y `asyncio`, con un solo hilo y un bucle de eventos (`radar/async_fetch.py`). La versión con asyncio usa solo la biblioteca estándar y por eso funciona en modo replay; en modo vivo se usan siempre hilos. Las dos producen exactamente las mismas ofertas. `bench/mechanisms.py` las compara con 8 a 256 descargas a la vez.
+
+Las filas crudas y el resumen quedan en `bench/results/`. Los resúmenes `data/bench.json`, `data/contention.json` y `data/mechanisms.json` se publican en la página de métricas del sitio.
 
 ### Calidad del emparejamiento
 

@@ -64,6 +64,11 @@
   <p class="meta" id="cont-meta"></p>
   <div class="chart-box"><canvas id="ch-cont" height="120"></canvas></div>
   <div class="table-wrap"><table id="t-cont"><thead><tr><th>Estrategia</th><th>Hilos</th></tr></thead><tbody></tbody></table></div>
+  <h2>Descarga: hilos frente a asyncio</h2>
+  <p class="meta" id="mech-meta"></p>
+  <p class="meta">La misma etapa de descarga con dos mecanismos. Con hilos, cada descarga en curso ocupa un hilo del sistema que pasa casi todo el tiempo esperando la red; con asyncio hay un solo hilo y un bucle de eventos que atiende a la descarga que tenga datos listos. Las dos versiones producen exactamente las mismas ofertas.</p>
+  <div class="chart-box"><canvas id="ch-mech" height="120"></canvas></div>
+  <div class="table-wrap"><table id="t-mech"><thead><tr><th>Descargas a la vez</th></tr></thead><tbody></tbody></table></div>
 </main>
 <script src="app.js"></script>
 <script type="module">
@@ -214,11 +219,29 @@ function renderContention(c) {
       r.lost_updates_max.toLocaleString("es"), r.correct ? "sí" : "no"]));
 }
 
-const [metrics, bench, contention] = await Promise.all(
-  ["data/metrics.json", "data/bench.json", "data/contention.json"].map(loadJson));
+function renderMechanisms(m) {
+  if (!m) { $("mech-meta").textContent = "Todavía no hay mediciones (python bench/mechanisms.py)."; return; }
+  $("mech-meta").textContent = `Modo replay, latencia ${m.latency_ms} ms, ${m.repeats} repeticiones por configuración (mediana, mín–máx). ` +
+    "Tiempo de CPU del proceso del pipeline durante toda la ejecución.";
+  const th = m.mechanisms.thread, as = m.mechanisms.asyncio;
+  const pts = (list, key) => list.map(p => ({ x: p.p, y: p[key].median }));
+  line($("ch-mech"), "Etapa de descarga según el mecanismo", "segundos (mediana)", [
+    ds("hilos: descarga", pts(th, "fetch_parse")), ds("asyncio: descarga", pts(as, "fetch_parse")),
+    ds("hilos: CPU", pts(th, "cpu_s"), true), ds("asyncio: CPU", pts(as, "cpu_s"), true)]);
+  const rows = th.map((t, i) => {
+    const a = as[i];
+    return [t.p, sec(t.fetch_parse), sec(a.fetch_parse), f2(t.fetch_parse.median / a.fetch_parse.median) + "×",
+            f2(t.cpu_s.median) + " s", f2(a.cpu_s.median) + " s"];
+  });
+  table($("t-mech"), ["Descargas a la vez", "Hilos", "asyncio", "asyncio más rápido", "CPU hilos", "CPU asyncio"], rows);
+}
+
+const [metrics, bench, contention, mechanisms] = await Promise.all(
+  ["data/metrics.json", "data/bench.json", "data/contention.json", "data/mechanisms.json"].map(loadJson));
 if (metrics) renderRun(metrics);
 renderBench(bench);
 renderContention(contention);
+renderMechanisms(mechanisms);
 </script>
 </body>
 </html>
