@@ -151,7 +151,7 @@ const f2 = v => v == null ? "—" : v.toFixed(2);
 const sec = st => `${f2(st.median)} s (${f2(st.min)}–${f2(st.max)})`;
 const STAGES = ["total", "discover", "fetch_parse", "retry_failed", "igdb", "match", "aggregate"];
 const xLog = { type: "logarithmic", title: { display: true, text: "workers (p)" },
-  ticks: { callback: v => [1, 2, 4, 8, 12, 16, 24, 32, 64].includes(v) ? v : "" } };
+  ticks: { callback: v => [1, 2, 4, 8, 12, 16, 24, 32, 64, 128, 256].includes(v) ? v : "" } };
 const pts = (c, k) => c.points.map(p => ({ x: p.p, y: p[k] }));
 function line(el, title, yTitle, datasets) {
   return new Chart(el, { type: "line", data: { datasets },
