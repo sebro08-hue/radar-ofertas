@@ -4,6 +4,7 @@ from .base import Duration, Offer, ParseResult, Rating, Request, Scraper
 from .gog import GogStore
 from .hltb import Hltb
 from .metacritic import Metacritic
+from .playstation import PlayStationStore
 from .steam import SteamDiscover, SteamStore
 from .xbox import XboxStore
 
@@ -14,6 +15,7 @@ REGISTRY: dict[str, type[Scraper]] = {
     "metacritic": Metacritic,
     "hltb": Hltb,
     "xbox": XboxStore,
+    "playstation": PlayStationStore,
 }
 
 

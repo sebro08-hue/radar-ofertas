@@ -13,6 +13,10 @@ PLATFORM_WORDS = re.compile(
     r"xbox series x\|?s|xbox series x|xbox series|xbox one|xsx|xbox|pc|steam|windows|mac|"
     r"digital code|download code|standard edition|european version|us version)\b")
 
+# PlayStation Store: «PS4 & PS5», «PS5 Version», «PlayStation 4/PlayStation 5». Se quita la
+# combinación completa para que no queden sueltos «and» ni «version».
+PS_COMBO = re.compile(r"\b(for )?(ps[45]|playstation [45])(\s*(and|/|,)\s*(ps[45]|playstation [45]))*(\s+version)?\b")
+
 # "Royal Edition", "The Collector's Edition", "Voidfarer Edition": el nombre de la edición
 # también sobra, no solo la palabra "edition".
 NAMED_EDITION = re.compile(r"\b(the )?[a-z0-9]+ edition\b")
@@ -51,12 +55,15 @@ def normalize(title: str) -> str:
     t = re.sub(r"['’`´]", "", t)                 # marvel's -> marvels
     t = t.replace("&", " and ")
     t = re.sub(r"\(.*?\)|\[.*?\]", " ", t)       # (PS5), [Digital], etc.
+    t = PS_COMBO.sub(" ", t)
     t = PLATFORM_WORDS.sub(" ", t)
     t = re.sub(r"\bgame of the year\b", "goty", t)     # antes de NAMED_EDITION: "year edition"
     t = NAMED_EDITION.sub(" ", t)
     t = EDITION_WORDS.sub(" ", t)
     t = re.sub(r"[^a-z0-9 ]+", " ", t)           # puntuación, guiones, dos puntos
     tokens = [ROMAN.get(tok, tok) for tok in t.split()]
+    while tokens and tokens[-1] in ("and", "for"):   # resto de «… for PS5», «… Xbox and Windows»
+        tokens.pop()
     if tokens and tokens[0] == "the":
         tokens = tokens[1:]
     return " ".join(tokens)

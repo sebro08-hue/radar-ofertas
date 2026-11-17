@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS games (
     metacritic_slug TEXT,
     hltb_id         INTEGER,
     xbox_url        TEXT,
+    ps_url          TEXT,
     image_url       TEXT,
     kind            TEXT NOT NULL DEFAULT 'game', -- game | game+dlc | dlc | other
     hard_case       INTEGER NOT NULL DEFAULT 0,   -- caso difícil de emparejamiento
@@ -150,6 +151,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "xbox_url" not in cols:
         conn.execute("ALTER TABLE games ADD COLUMN xbox_url TEXT")
         conn.commit()
+    if "ps_url" not in cols:
+        conn.execute("ALTER TABLE games ADD COLUMN ps_url TEXT")
+        conn.commit()
     if "hard_reason" not in cols:
         # Motivo de los casos difíciles marcados automáticamente (NULL = marcado a mano).
         conn.execute("ALTER TABLE games ADD COLUMN hard_reason TEXT")
@@ -203,7 +207,7 @@ def load_games(conn: sqlite3.Connection, limit: int | None = None) -> list[dict]
     return games
 
 
-UPDATABLE_FIELDS = {"metacritic_slug", "hltb_id", "image_url", "xbox_url"}
+UPDATABLE_FIELDS = {"metacritic_slug", "hltb_id", "image_url", "xbox_url", "ps_url"}
 
 
 def update_game_fields(conn: sqlite3.Connection, game_id: int, fields: dict) -> None:

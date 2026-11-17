@@ -27,7 +27,7 @@ from . import db, igdb, scrapers
 from .async_fetch import AsyncReplayFetcher
 from .http_client import FetchError, HttpClient
 from .matching import MatchTask, match_game, set_catalog
-from .scrapers import xbox
+from .scrapers import playstation, xbox
 from .scrapers.base import ParseResult, Request, Scraper
 
 MODES = ("sequential", "concurrent", "parallel")
@@ -143,6 +143,8 @@ class Pipeline:
             print(f"  [discover] falló {f.job.req.url}: {f.error}")
         if "xbox" in self.s["sources"]:
             self.link_xbox()
+        if "playstation" in self.s["sources"]:
+            self.link_playstation()
         return count, results
 
     def _igdb_durations(self, games: list[dict], col: Collected) -> None:
@@ -165,6 +167,21 @@ class Pipeline:
             col.durations.append((targets[appid], d))
             col.ok.add((targets[appid], "igdb"))
         print(f"  [igdb] duración para {len(found)} de {len(targets)} juegos sin ID de HLTB")
+
+    def link_playstation(self) -> int:
+        """Enlaza los juegos del catálogo con su página en playstation.com usando el sitemap
+        de EE. UU. (la búsqueda de la tienda carga con JavaScript). Devuelve cuántos enlazó."""
+        try:
+            index = playstation.build_ps_index(self.http.get(playstation.SITEMAP))
+        except FetchError as exc:
+            print(f"  [playstation] no se pudo leer el sitemap: {exc.reason}")
+            return 0
+        linked = playstation.link(db.load_games(self.conn), index)
+        for gid, url in linked.items():
+            db.update_game_fields(self.conn, gid, {"ps_url": url})
+        self.conn.commit()
+        print(f"  [playstation] {len(index)} juegos en el sitemap; {len(linked)} juegos enlazados")
+        return len(linked)
 
     def link_xbox(self) -> int:
         """Enlaza los juegos del catálogo con su página de Xbox Store usando los sitemaps
